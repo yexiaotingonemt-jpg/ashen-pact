@@ -1,3 +1,9 @@
+.future-mode .hand-area {
+  pointer-events: none;
+}
+.future-mode .hand-area button {
+  pointer-events: auto;
+}
 .future-ledger {
   width: min(100%, 640px);
   flex-shrink: 0;
@@ -424,8 +430,8 @@
 }
 @media (max-height: 900px) and (min-width: 701px) {
   .future-mode .pile .card-back {
-    width: 54px;
-    height: 80px;
+    width: 44px;
+    height: 64px;
     margin-bottom: 10px;
   }
   .future-mode .pile .card-back > .sigil,
