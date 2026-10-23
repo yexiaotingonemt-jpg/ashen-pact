@@ -119,7 +119,7 @@ a {
     linear-gradient(0deg, #050907f2, transparent 42%, #05090710 70%, #05090760);
 }
 .art {
-  background-image: url("/art/portraits.png");
+  background-image: url("/art/portraits.webp");
   background-size: 400% 300%;
   background-repeat: no-repeat;
   background-color: #1b2521;

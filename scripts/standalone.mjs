@@ -16,9 +16,10 @@ const js = await readFile(
 );
 let css = await readFile(path.join(dist, style[1].replace(/^\//, "")), "utf8");
 const artwork = new Map();
-for (const name of ["courtyard.png", "portraits.png", "card-frame.png"]) {
+for (const name of ["courtyard.png", "portraits.webp", "card-frame.png"]) {
   const art = await readFile(path.join(dist, "art", name));
-  artwork.set(name, "data:image/png;base64," + art.toString("base64"));
+  const mime = name.endsWith(".webp") ? "image/webp" : "image/png";
+  artwork.set(name, `data:${mime};base64,` + art.toString("base64"));
 }
 css = css.replace(/url\((["']?)([^)"']+)\1\)/g, (match, _quote, url) => {
   const name = url.split("/").at(-1);
@@ -33,6 +34,7 @@ html = html.replace(
     "</script>",
 );
 html = html.replace(style[0], () => "<style>" + css + "</style>");
+html = html.replace(/<link\b[^>]*rel="preload"[^>]*>/g, "");
 html = html.replace(
   /href="\.\/sigil\.svg"/,
   'href="data:image/svg+xml;base64,' + icon.toString("base64") + '"',
