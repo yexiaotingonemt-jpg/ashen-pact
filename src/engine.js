@@ -11,6 +11,7 @@ import {
 import {
   canEditContract,
   contractText,
+  omenText,
   debtValue,
   victoryBill,
 } from "./contracts.js";
@@ -160,18 +161,26 @@ function settleContract(s, c, context = { drawBudget: 2 }) {
     else if (c.effect === "summon" && s.enemies.length < 3)
       s.enemies.push(makeEnemy(s, s.stage >= 2 ? "elder" : "wolf"));
     else if (c.effect === "collect") {
-      s.contracts
-        .filter((x) => x.owner === "player")
-        .forEach((x) => (x.due = Math.max(s.turn, x.due - 1)));
-      log(s, "催债仪式：所有己方债务提前 1 回合。", "bad");
+      const debts = s.contracts.filter((x) => x.owner === "player");
+      if (debts.length) {
+        debts.forEach((x) => (x.due = Math.max(s.turn, x.due - 1)));
+        log(s, "催债仪式：所有己方债务提前 1 回合。", "bad");
+      } else {
+        damage(s, s.hero, 2);
+        log(s, "催债仪式：没有己方债务，对你造成 2 点伤害。", "bad");
+      }
     } else if (c.effect === "writ") {
-      s.contracts
-        .filter((x) => x.owner === "player")
-        .forEach((x) => {
+      const debts = s.contracts.filter((x) => x.owner === "player");
+      if (debts.length) {
+        debts.forEach((x) => {
           if (x.kind === "betrayal") x.interest++;
           else x.amount++;
         });
-      log(s, "追加罚息：所有己方债务金额 +1；倒戈骑士攻击 +1。", "bad");
+        log(s, "追加罚息：所有己方债务金额 +1；倒戈骑士攻击 +1。", "bad");
+      } else {
+        s.boss.shield += 3;
+        log(s, "追加罚息：没有己方债务，首领获得 3 护甲。", "bad");
+      }
     }
     if (c.rage) damage(s, s.hero, c.rage);
   }
@@ -289,8 +298,15 @@ function clean(s) {
   for (const c of s.contracts.filter(
     (c) => c.kind === "betrayal" && deadIds.includes(c.unitId),
   )) {
-    takeContract(s, c);
-    log(s, `绑定随从阵亡，「${c.source}」的倒戈条款解除。`, "good");
+    releaseBond(s, c);
+    c.kind = "blood";
+    c.amount = 3 + (c.interest || 0) * 2;
+    delete c.unitId;
+    log(
+      s,
+      `绑定随从阵亡，「${c.source}」改为第 ${c.due} 回合支付 ${c.amount} 生命的血债。`,
+      "contract",
+    );
   }
   for (const u of s.enemies.filter((x) => x.hp <= 0)) {
     log(s, `${u.name} 化为灰烬。`, "good");
@@ -384,14 +400,14 @@ function omenAt(s, turn) {
               ? {
                   type,
                   label: "催债仪式",
-                  text: "所有己方债务提前 1 回合",
+                  text: omenText({ effect: "collect" }),
                   value: 0,
                 }
               : type === "writ"
                 ? {
                     type,
                     label: "追加罚息",
-                    text: "所有己方债务加息，倒戈骑士攻击 +1",
+                    text: omenText({ effect: "writ" }),
                     value: 1,
                   }
                 : {
@@ -412,6 +428,7 @@ export function intent(s) {
     return {
       ...c,
       type: c.effect,
+      text: omenText(c),
       rageStart: DIFFICULTIES[s.difficulty].rageStart,
     };
   if (!s.contracts) return omenAt(s, s.turn);

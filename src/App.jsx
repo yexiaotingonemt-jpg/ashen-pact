@@ -53,6 +53,7 @@ import {
   debtValue,
   victoryBill,
   canEditContract,
+  upcomingPayment,
 } from "./contracts.js";
 
 const SAVE_KEY = "ashen-pact-future-save-v2";
@@ -912,6 +913,15 @@ export default function App() {
                 取消 <kbd>Esc</kbd>
               </button>
             </>
+          ) : upcomingPayment(s) ? (
+            <button
+              className="payment-reminder"
+              title="按当前契约日期汇总；催债可能使债务提前到期。点击查看账簿。"
+              onClick={() => setModal("ledger")}
+            >
+              <Clock3 size={12} />
+              {upcomingPayment(s)}
+            </button>
           ) : (
             <span>预支力量，改写代价。点击账簿查看契约。</span>
           )}
@@ -1190,7 +1200,8 @@ export default function App() {
             </p>
             <p>
               <strong>无款可还</strong>能量或回合抽牌不足时，差额按每点/张 3
-              生命补偿。消灭借来的随从，可以解除其绑定的倒戈条款。
+              生命补偿。借来的骑士阵亡后，倒戈改为原到期支付 3
+              生命，已有倒戈利息每层再加 2；仍可改写或转嫁。
             </p>
           </div>
           <div className="ledger-totals">

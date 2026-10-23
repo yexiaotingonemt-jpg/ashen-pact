@@ -8,7 +8,7 @@ export const CARDS = {
     hp: 5,
     tags: ["突袭"],
     debt: { kind: "betrayal", after: 2, amount: 7 },
-    text: "突袭 · 立即加入战斗。",
+    text: "突袭。阵亡转为 3 点血债，另计利息；到期不变。",
     flavor: "他承诺效忠你。直到后天。",
     rarity: "稀有",
   },

@@ -16,9 +16,17 @@ export function contractLabel(c) {
   return c.source;
 }
 
+export function omenText(c) {
+  if (c.effect === "collect")
+    return "所有己方债务提前 1 回合；若无己方债务，对你造成 2 点伤害";
+  if (c.effect === "writ")
+    return "所有己方债务加息，倒戈骑士攻击 +1；若无己方债务，首领获得 3 护甲";
+  return c.text;
+}
+
 export function contractText(c) {
   if (c.kind === "omen")
-    return c.text + (c.rage ? `；另造成 ${c.rage} 点狂怒伤害` : "");
+    return omenText(c) + (c.rage ? `；另造成 ${c.rage} 点狂怒伤害` : "");
   if (c.kind === "blood")
     return `${c.owner === "enemy" ? "首领" : "你"}失去 ${c.amount} 点生命，无视护甲。`;
   if (c.kind === "energy")
@@ -26,7 +34,7 @@ export function contractText(c) {
   if (c.kind === "draw")
     return `少抽 ${c.amount} 张回合抽牌；不足的每张牌改付 3 生命。`;
   if (c.kind === "betrayal")
-    return `绑定随从倒戈，归敌方控制${c.interest ? `并获得 +${c.interest} 攻击` : ""}。敌方战场已满时，随从被收回且首领获得 4 护甲。随从阵亡则条款解除。`;
+    return `绑定随从倒戈，归敌方控制${c.interest ? `并获得 +${c.interest} 攻击` : ""}。敌方战场已满时，随从被收回且首领获得 4 护甲。随从阵亡则改为原到期支付 ${3 + (c.interest || 0) * 2} 生命（基础 3，每层已有倒戈利息 +2），仍可改写或转嫁。`;
   return "";
 }
 
@@ -45,6 +53,23 @@ export function victoryBill(state) {
   return (state.contracts || [])
     .filter((c) => c.owner === "player")
     .reduce((sum, c) => sum + debtValue(c), 0);
+}
+
+export function upcomingPayment(state) {
+  const debts = (state.contracts || []).filter((c) => c.owner === "player");
+  if (!debts.length) return "";
+  const due = Math.min(...debts.map((c) => c.due));
+  const totals = {};
+  for (const c of debts.filter((c) => c.due === due))
+    totals[c.kind] =
+      (totals[c.kind] || 0) + (c.kind === "betrayal" ? 1 : c.amount);
+  const parts = [
+    totals.blood && `${totals.blood} 生命`,
+    totals.energy && `${totals.energy} 能量`,
+    totals.draw && `少抽 ${totals.draw} 张`,
+    totals.betrayal && `${totals.betrayal} 名随从倒戈`,
+  ].filter(Boolean);
+  return `${due === state.turn + 1 ? "下回合" : `${due - state.turn} 回合后`}账面到期：${parts.join(" · ")}`;
 }
 
 export function timeline(state) {

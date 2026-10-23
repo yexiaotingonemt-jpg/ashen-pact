@@ -1,6 +1,24 @@
 .future-mode .hand-area {
   pointer-events: none;
 }
+.future-mode .selection-hint .payment-reminder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  max-width: 100%;
+  margin: 0;
+  padding: 2px 4px;
+  color: #f0b693;
+  border: 0;
+  font-size: 10px;
+  line-height: 1.35;
+  letter-spacing: 0;
+  text-align: center;
+}
+.payment-reminder svg {
+  flex-shrink: 0;
+}
 .future-mode .hand-area button {
   pointer-events: auto;
 }

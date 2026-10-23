@@ -37,10 +37,15 @@ export function value(s) {
               : c.effect === "howl"
                 ? s.enemies.length * 1.2
                 : c.effect === "collect"
-                  ? s.contracts.filter((x) => x.owner === "player").length * 1.6
-                  : c.effect === "writ"
+                  ? s.contracts.some((x) => x.owner === "player")
                     ? s.contracts.filter((x) => x.owner === "player").length *
-                      1.3
+                      1.6
+                    : 2 * 0.85
+                  : c.effect === "writ"
+                    ? s.contracts.some((x) => x.owner === "player")
+                      ? s.contracts.filter((x) => x.owner === "player").length *
+                        1.3
+                      : 3 * 0.4
                     : 0;
       return score - (risk + (c.rage || 0) * 0.9) * discount;
     }

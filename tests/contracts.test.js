@@ -12,6 +12,8 @@ import {
   victoryBill,
   timeline,
   canEditContract,
+  contractText,
+  upcomingPayment,
 } from "../src/contracts.js";
 const quiet = () => {
   const s = newRun(99);
@@ -106,26 +108,76 @@ test("borrowed knight is charge now and defects after two turns", () => {
   assert.equal(s.enemies.find((u) => u.uid === uid).key, "borrowedKnight");
   assert.ok(validateSave(s));
 });
-test("dead loan unit releases its binding debt", () => {
+function fallenKnight(withInterest = false) {
   let s = play(quiet(), "borrowedKnight");
+  if (withInterest) s = play(s, "defer", debt(s).uid);
   s.enemies = [
     {
       uid: "giant",
       key: "guard",
       name: "Giant",
       art: 4,
-      atk: 10,
-      hp: 20,
-      maxHp: 20,
+      atk: 5,
+      hp: 4,
+      maxHp: 4,
       tags: [],
       burn: 0,
       ready: true,
       ward: false,
     },
   ];
-  s = act(s, { type: "attack", uid: s.allies[0].uid, target: "giant" });
+  return act(s, { type: "attack", uid: s.allies[0].uid, target: "giant" });
+}
+test("a fallen borrowed knight keeps a three-life debt at the original deadline", () => {
+  let s = fallenKnight();
   assert.equal(s.allies.length, 0);
+  assert.equal(s.enemies.length, 0);
+  assert.equal(debt(s).kind, "blood");
+  assert.equal(debt(s).amount, 3);
+  assert.equal(debt(s).due, 3);
+  assert.equal(debt(s).unitId, undefined);
+  assert.equal(s.stats.signed, 1, "Conversion is not a newly signed contract");
+  assert.ok(validateSave(JSON.parse(JSON.stringify(s))));
+  s.hero.shield = 100;
+  s = end(s);
+  assert.equal(s.hero.hp, 40);
+  s = end(s);
+  assert.equal(s.hero.hp, 37);
+  assert.equal(s.stats.paidLife, 3);
   assert.equal(debt(s), undefined);
+});
+test("deferring a knight before its death preserves the deadline and two-life interest", () => {
+  let s = fallenKnight(true);
+  assert.equal(debt(s).due, 4);
+  assert.equal(debt(s).amount, 5);
+  assert.equal(debt(s).edits, 1);
+  s.hero.shield = 100;
+  s = end(end(s));
+  assert.equal(s.hero.hp, 40);
+  s = end(s);
+  assert.equal(s.hero.hp, 35);
+});
+test("a dead knight's blood debt can transfer and settles against the boss", () => {
+  let s = fallenKnight();
+  const uid = debt(s).uid;
+  s = play(s, "transfer", uid);
+  assert.equal(s.notice, "");
+  assert.equal(victoryBill(s), 0);
+  assert.equal(s.contracts.find((c) => c.uid === uid).due, 3);
+  s.hero.shield = 100;
+  s = end(end(s));
+  assert.equal(s.hero.hp, 40);
+  assert.equal(s.boss.hp, 97);
+});
+test("victory collects a fallen knight's remaining debt before recovery", () => {
+  let s = fallenKnight();
+  s.hero.hp = 20;
+  s.boss.hp = 1;
+  assert.equal(victoryBill(s), 3);
+  s = play(s, "bolt", "boss");
+  assert.equal(s.phase, "reward");
+  assert.equal(s.stats.victoryBill, 3);
+  assert.equal(s.hero.hp, 23, "20 - 3 debt + 6 victory recovery");
 });
 test("rewriting betrayal changes its payment and keeps the knight", () => {
   let s = play(quiet(), "borrowedKnight");
@@ -289,6 +341,120 @@ test("priest collection brings a future debt forward into the current settlement
   assert.equal(s.turn, 2);
   assert.equal(debt(s), undefined);
   assert.equal(s.hero.hp, 34);
+});
+function encounter(stage) {
+  let s = newRun(7);
+  s.phase = "camp";
+  s.stage = stage - 1;
+  s = act(s, { type: "camp", choice: "rest" });
+  s.enemies = [];
+  return s;
+}
+test("collection with no player debt deals two blockable damage, even with enemy debt", () => {
+  let s = encounter(2);
+  s = play(s, "borrowedFlame", "boss");
+  s = play(s, "transfer", debt(s).uid);
+  s.hero.shield = 1;
+  s = end(s);
+  assert.equal(s.hero.hp, 39);
+  assert.equal(s.hero.shield, 0);
+  assert.equal(s.contracts.find((c) => c.kind === "blood").due, 3);
+});
+test("writ without player debt grants exactly three boss armor", () => {
+  let s = encounter(3);
+  s = end(s);
+  const hp = s.hero.hp;
+  s = end(s);
+  assert.equal(s.boss.shield, 3);
+  assert.equal(s.hero.hp, hp);
+});
+test("writ with blood debt adds interest without granting fallback boss armor", () => {
+  let s = end(encounter(3));
+  s = play(s, "borrowedFlame", "boss");
+  assert.equal(debt(s).due, 4);
+  s = end(s);
+  assert.equal(debt(s).amount, 7);
+  assert.equal(debt(s).due, 4);
+  assert.equal(s.boss.shield, 0);
+});
+test("writ interest on a living loan knight remains owed if it dies", () => {
+  let s = end(encounter(3));
+  s = play(s, "borrowedKnight");
+  s = end(s);
+  assert.equal(debt(s).interest, 1);
+  assert.equal(s.boss.shield, 0);
+  s.enemies = [
+    {
+      uid: "executioner",
+      key: "guard",
+      name: "Executioner",
+      art: 4,
+      atk: 5,
+      hp: 4,
+      maxHp: 4,
+      tags: [],
+      burn: 0,
+      ready: true,
+      ward: false,
+    },
+  ];
+  s = act(s, { type: "attack", uid: s.allies[0].uid, target: "executioner" });
+  assert.equal(debt(s).kind, "blood");
+  assert.equal(debt(s).amount, 5);
+  assert.equal(debt(s).due, 4);
+});
+test("version-two saved promises expose the current conditional rules after reload", () => {
+  let s = encounter(2);
+  s.contracts[0].text = "所有己方债务提前 1 回合";
+  s = JSON.parse(JSON.stringify(s));
+  assert.ok(validateSave(s));
+  assert.match(intent(s).text, /若无己方债务/);
+  assert.match(contractText(s.contracts[0]), /2 点伤害/);
+  s = end(s);
+  assert.equal(s.hero.hp, 38);
+});
+test("upcoming payment aggregates all player debts on the nearest due turn", () => {
+  const s = {
+    turn: 4,
+    contracts: [
+      { owner: "player", due: 5, kind: "blood", amount: 3 },
+      { owner: "player", due: 5, kind: "blood", amount: 4 },
+      { owner: "player", due: 5, kind: "energy", amount: 1 },
+      { owner: "player", due: 5, kind: "energy", amount: 2 },
+      { owner: "player", due: 5, kind: "draw", amount: 2 },
+      { owner: "player", due: 5, kind: "betrayal", amount: 7 },
+      { owner: "player", due: 5, kind: "betrayal", amount: 7 },
+    ],
+  };
+  assert.equal(
+    upcomingPayment(s),
+    "下回合账面到期：7 生命 · 3 能量 · 少抽 2 张 · 2 名随从倒戈",
+  );
+});
+test("upcoming payment ignores enemy promises and transferred debt, including earlier dates", () => {
+  let s = play(quiet(), "borrowedFlame", "boss");
+  s.contracts.push({ owner: "enemy", due: 2, kind: "blood", amount: 99 });
+  assert.equal(upcomingPayment(s), "2 回合后账面到期：6 生命");
+  s = play(s, "transfer", debt(s).uid);
+  assert.equal(upcomingPayment(s), "");
+  assert.equal(upcomingPayment({ turn: 1, contracts: [] }), "");
+  assert.equal(upcomingPayment({ turn: 1 }), "");
+});
+test("upcoming payment excludes later debt until the first payment settles", () => {
+  let s = play(quiet(), "borrowedFlame", "boss");
+  s = play(s, "borrowedEnergy");
+  s = play(s, "borrowedAegis");
+  assert.equal(upcomingPayment(s), "下回合账面到期：2 能量 · 少抽 2 张");
+  s = end(s);
+  assert.equal(upcomingPayment(s), "下回合账面到期：6 生命");
+});
+test("upcoming payment reflects a real knight death as blood instead of betrayal", () => {
+  let s = fallenKnight();
+  assert.equal(upcomingPayment(s), "2 回合后账面到期：3 生命");
+  s = play(s, "transfer", debt(s).uid);
+  assert.equal(upcomingPayment(s), "");
+  s = fallenKnight(true);
+  assert.equal(upcomingPayment(s), "3 回合后账面到期：5 生命");
 });
 test("future ledger survives serialization and rejects corrupt contracts", () => {
   let s = play(quiet(), "borrowedKnight");
