@@ -423,6 +423,21 @@
   }
 }
 @media (max-height: 900px) and (min-width: 701px) {
+  .future-mode .pile .card-back {
+    width: 54px;
+    height: 80px;
+    margin-bottom: 10px;
+  }
+  .future-mode .pile .card-back > .sigil,
+  .future-mode .pile .card-back > .sigil svg,
+  .future-mode .pile .card-back > svg {
+    width: 28px;
+    height: 28px;
+  }
+  .future-mode .pile .card-back > span:not(.sigil) {
+    font-size: 4px;
+    letter-spacing: 0.5px;
+  }
   .game.future-mode {
     grid-template-rows: 74px minmax(376px, 1fr) 218px 32px;
     min-height: 710px;
