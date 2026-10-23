@@ -1,0 +1,882 @@
+.future-ledger {
+  width: min(100%, 640px);
+  flex-shrink: 0;
+  margin: 5px 0 4px;
+  padding: 7px 9px 8px;
+  border-block: 1px solid #a98b4c80;
+  background: linear-gradient(90deg, #0c1712bb, #102019ef 45%, #0b1511bb);
+  box-shadow: 0 6px 20px #0005;
+  z-index: 3;
+  position: relative;
+}
+.ledger-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 19px;
+  margin-bottom: 4px;
+  color: #dec58e;
+  font-family: var(--serif);
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+.ledger-heading > span,
+.ledger-heading > button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ledger-heading small {
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: 8px;
+  color: #9aa591;
+  letter-spacing: 0;
+  margin-left: 5px;
+}
+.ledger-heading > button {
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: 9px;
+  color: #b4b5a0;
+  padding: 2px;
+}
+.ledger-heading > button b {
+  font-weight: 400;
+  color: #e6a484;
+}
+.timeline-track {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.timeline-column {
+  min-width: 0;
+  position: relative;
+  border-left: 1px solid #c1a46a44;
+  padding-left: 7px;
+}
+.timeline-date {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: #bcb696;
+  font-size: 9px;
+  height: 16px;
+}
+.timeline-date small {
+  font:
+    9px Georgia,
+    serif;
+  color: #8aa996;
+}
+.contract-count {
+  font-size: 8px;
+  font-weight: 400;
+  color: #d8bc86;
+  margin-left: auto;
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+.timeline-date > svg {
+  margin-left: auto;
+  opacity: 0.5;
+}
+.contract-list {
+  height: 60px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 2px 3px 1px 0;
+  scrollbar-width: thin;
+}
+.contract-entry {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  min-height: 25px;
+  padding: 4px 6px;
+  border: 1px solid #7c685443;
+  background: #321f1a88;
+  color: #e2ad8b;
+  font-size: 10px;
+  text-align: left;
+  line-height: 1.25;
+  transition: 0.18s;
+}
+.contract-entry > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.contract-entry > i {
+  font:
+    8px Georgia,
+    serif;
+  font-style: normal;
+  margin-left: auto;
+  color: #ddbd87;
+}
+.contract-entry.enemy.omen {
+  background: #181d1bba;
+  border-color: #7b6e544f;
+  color: #c8b48c;
+}
+.contract-entry.enemy.blood {
+  background: #12342dba;
+  border-color: #78b6a566;
+  color: #9ce5c8;
+}
+.contract-entry.player.betrayal {
+  background: #3a24219e;
+  color: #ebac95;
+}
+.contract-entry:hover {
+  filter: brightness(1.25);
+  border-color: #c8ae71;
+}
+.contract-entry.targetable {
+  background: #5d482b99;
+  color: #fff1bd;
+  border-color: #e1c185 !important;
+}
+.empty-future {
+  font-family: var(--serif);
+  font-size: 9px;
+  color: #6f8774;
+  padding-top: 19px;
+  letter-spacing: 1px;
+}
+.card-debt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-top: 1px solid #a6674b55;
+  padding-top: 5px;
+  margin-top: 6px;
+  color: #efb08e;
+  font-family: var(--serif);
+  font-size: 10px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.card-debt > svg {
+  width: 10px;
+  height: 10px;
+}
+.has-debt .card-cost {
+  background: linear-gradient(135deg, #c8a66c, #54442a 70%);
+}
+.editor-card .card-frame {
+  border-color: #9cbdc0;
+}
+.editor-card .card-type {
+  color: #9dcfca;
+}
+.has-debt .card-copy {
+  top: 58%;
+}
+.has-debt .card-copy p {
+  margin-top: 6px;
+}
+.unit-tags .loan-badge {
+  color: #edb29b;
+  border-color: #a6725155;
+  background: #2f1c18dc;
+}
+.battle-log p.contract {
+  color: #8bc9b4;
+}
+.future-mode .selection-hint > span {
+  letter-spacing: 2px;
+}
+.future-mode .brand small {
+  letter-spacing: 3px;
+}
+.intro-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 25px;
+  margin: 29px 4px;
+}
+.intro-steps article {
+  border-left: 1px solid #8c795446;
+  padding-left: 18px;
+}
+.intro-steps article > svg {
+  display: block;
+  width: 30px;
+  height: 30px;
+  color: #d8b677;
+  stroke-width: 1.1;
+  margin-bottom: 17px;
+}
+.intro-steps article > span {
+  font:
+    9px Georgia,
+    var(--serif);
+  letter-spacing: 2px;
+  color: #96b2a0;
+}
+.intro-steps h3 {
+  font: 20px var(--serif);
+  color: #e4cea1;
+  letter-spacing: 1px;
+  margin: 12px 0;
+}
+.intro-steps p {
+  font-size: 11px;
+  line-height: 2;
+  color: #b4beaa;
+}
+.intro-combo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 11px;
+  border-block: 1px solid #a88d4e44;
+  padding: 18px 12px;
+  margin: 30px 0 0;
+  background: #0a151159;
+}
+.intro-combo strong {
+  font-weight: 400;
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: #aaae94;
+}
+.intro-combo > span {
+  font: 16px var(--serif);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  color: #dfc58e;
+}
+.intro-combo small {
+  font-size: 10px;
+  color: #9fb9a2;
+  line-height: 1.8;
+  text-align: center;
+}
+.intro-help {
+  margin: auto;
+  font-size: 10px;
+}
+.contract-detail {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px 10px 27px;
+  color: #e3ac87;
+  border-block: 1px solid #9a805549;
+}
+.contract-detail.enemy {
+  color: #9dceb8;
+}
+.contract-detail > svg {
+  width: 43px;
+  height: 43px;
+  stroke-width: 1.1;
+}
+.contract-detail h3 {
+  font: 22px var(--serif);
+  letter-spacing: 2px;
+}
+.contract-detail p {
+  font-size: 12px;
+  line-height: 2;
+  text-align: center;
+  color: #cfceba;
+}
+.contract-detail small {
+  font-size: 10px;
+  color: #a6ad95;
+  line-height: 1.8;
+  text-align: center;
+}
+.contract-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin: 24px 0 7px;
+}
+.contract-quick-actions > button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #91ae9066;
+  color: #c8ddbf;
+  background: #1e3022aa;
+  padding: 11px 13px;
+  font-size: 11px;
+}
+.contract-quick-actions > button:hover {
+  border-color: #cdb479;
+  background: #8b703d33;
+}
+.contract-quick-actions b {
+  font:
+    10px Georgia,
+    var(--serif);
+  color: #9bb4a4;
+  font-weight: 400;
+}
+.ledger-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  color: #b5c1aa;
+  font-size: 11px;
+  line-height: 1.9;
+}
+.ledger-rules strong {
+  display: block;
+  color: #d0b884;
+  font: 16px var(--serif);
+  margin-bottom: 5px;
+  letter-spacing: 2px;
+}
+.ledger-totals {
+  display: flex;
+  justify-content: space-around;
+  border-block: 1px solid #a0884f44;
+  margin: 23px 0;
+  padding: 18px 7px;
+}
+.ledger-totals > span {
+  font-size: 10px;
+  color: #a9b49e;
+  display: flex;
+  gap: 8px;
+  flex-direction: column;
+  align-items: center;
+}
+.ledger-totals b {
+  font:
+    21px Georgia,
+    var(--serif);
+  color: #e4c38c;
+}
+.settled-ledger h3 {
+  font: 17px var(--serif);
+  letter-spacing: 2px;
+  color: #d0ba8f;
+  margin-bottom: 12px;
+}
+.settled-ledger p {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #808c6b22;
+  padding: 10px 2px;
+  color: #a6baa1;
+  font-size: 10px;
+}
+.settled-ledger small {
+  font: 10px Georgia;
+  color: #b8a16e;
+}
+.settled-ledger b {
+  font-size: 10px;
+  font-weight: 400;
+  margin-left: auto;
+  color: #c3c4ac;
+}
+@media (min-width: 1300px) and (min-height: 900px) {
+  .future-mode .unit-card {
+    width: 128px;
+    height: 153px;
+  }
+  .future-mode .unit-row {
+    min-height: 162px;
+  }
+  .future-mode .summon-slot {
+    width: 128px;
+    height: 140px;
+  }
+  .future-mode .unit-name {
+    font-size: 13px;
+    bottom: 35px;
+  }
+  .future-mode .friendly .unit-name {
+    bottom: 40px;
+  }
+  .future-mode .unit-stats .stat b {
+    font-size: 22px;
+  }
+  .future-mode .unit-stats {
+    bottom: 7px;
+  }
+  .future-mode .friendly .unit-stats {
+    bottom: 12px;
+  }
+  .future-mode .selection-hint {
+    height: 29px;
+  }
+  .future-mode .card-debt {
+    font-size: 11px;
+    margin-top: 8px;
+  }
+}
+@media (max-height: 900px) and (min-width: 701px) {
+  .game.future-mode {
+    grid-template-rows: 74px minmax(376px, 1fr) 218px 32px;
+    min-height: 710px;
+    --card-w: 145px;
+    --card-h: 200px;
+  }
+  .future-mode .battlefield {
+    padding-top: 10px;
+  }
+  .future-mode .enemy-header {
+    height: 50px;
+  }
+  .future-mode .boss-name {
+    min-height: 45px;
+  }
+  .future-mode .unit-row {
+    min-height: 99px;
+    padding: 4px 0;
+  }
+  .future-mode .unit-card {
+    width: 79px;
+    height: 92px;
+  }
+  .future-mode .unit-card > .art {
+    bottom: 22px;
+  }
+  .future-mode .unit-name {
+    font-size: 9px;
+    bottom: 25px;
+    letter-spacing: 0;
+  }
+  .future-mode .friendly .unit-name {
+    bottom: 29px;
+  }
+  .future-mode .unit-stats {
+    bottom: 4px;
+    left: 5px;
+    right: 5px;
+  }
+  .future-mode .friendly .unit-stats {
+    bottom: 9px;
+  }
+  .future-mode .unit-stats .stat b {
+    font-size: 17px;
+  }
+  .future-mode .unit-stats .stat svg {
+    width: 9px;
+    height: 9px;
+  }
+  .future-mode .unit-tags {
+    top: 4px;
+    left: 4px;
+    right: 4px;
+  }
+  .future-mode .unit-tags > span {
+    font-size: 6px;
+    padding: 1px 2px;
+  }
+  .future-mode .unit-tags > span > svg {
+    width: 8px;
+    height: 8px;
+  }
+  .future-mode .unit-state {
+    font-size: 6px;
+  }
+  .future-mode .summon-slot {
+    width: 79px;
+    height: 83px;
+    gap: 4px;
+  }
+  .future-mode .summon-slot > .sigil,
+  .future-mode .summon-slot > .sigil > svg {
+    width: 22px;
+    height: 22px;
+  }
+  .future-mode .summon-slot > span:not(.sigil) {
+    font-size: 9px;
+  }
+  .future-mode .summon-slot > small {
+    font-size: 6px;
+  }
+  .future-ledger {
+    padding: 5px 8px;
+    margin: 2px 0;
+  }
+  .contract-list {
+    height: 50px;
+    gap: 3px;
+  }
+  .contract-entry {
+    min-height: 22px;
+    font-size: 9px;
+    padding: 3px 5px;
+  }
+  .ledger-heading {
+    font-size: 10px;
+    height: 16px;
+    margin-bottom: 3px;
+  }
+  .timeline-date {
+    height: 14px;
+    font-size: 8px;
+  }
+  .future-mode .selection-hint {
+    height: 23px;
+    font-size: 9px;
+  }
+  .future-mode .selection-hint > span {
+    font-size: 8px;
+    letter-spacing: 1px;
+  }
+  .future-mode .card-name {
+    top: 44%;
+    min-height: 23px;
+    font-size: 13px;
+  }
+  .future-mode .card-copy {
+    top: 57%;
+  }
+  .future-mode .card-copy p {
+    font-size: 9px;
+    line-height: 1.55;
+    margin-top: 4px;
+  }
+  .future-mode .card-debt {
+    font-size: 8px;
+    padding-top: 4px;
+    margin-top: 5px;
+  }
+  .future-mode .card-type {
+    font-size: 7px;
+  }
+  .future-mode .card-stats .stat b {
+    font-size: 18px;
+  }
+  .future-mode .card-stats .hp b {
+    font-size: 17px;
+  }
+  .future-mode .hero-panel {
+    margin-top: 14px;
+  }
+  .future-mode .hero-portrait {
+    height: 167px;
+  }
+  .future-mode .energy-orb {
+    width: 75px;
+    height: 75px;
+  }
+  .future-mode .energy-block {
+    padding: 5px 0 8px;
+  }
+  .future-mode .hero-caption h1 {
+    font-size: 19px;
+  }
+  .future-mode .hero-panel .relic-row {
+    padding: 7px 0 10px;
+  }
+}
+@media (max-width: 980px) and (min-width: 701px) {
+  .future-mode .enemy-header {
+    height: 73px;
+    gap: 9px;
+  }
+  .future-mode .intent {
+    height: 19px;
+  }
+  .future-mode .unit-row {
+    min-height: 95px;
+  }
+  .future-mode .future-ledger {
+    padding: 4px 6px;
+  }
+  .future-mode .ledger-heading small {
+    display: none;
+  }
+  .future-mode .contract-list {
+    height: 46px;
+  }
+  .future-mode .contract-entry {
+    font-size: 8px;
+    min-height: 21px;
+    gap: 3px;
+    padding: 3px;
+  }
+  .future-mode .timeline-track {
+    gap: 5px;
+  }
+  .future-mode .timeline-column {
+    padding-left: 4px;
+  }
+  .future-mode .timeline-date {
+    font-size: 7px;
+  }
+}
+@media (max-width: 700px) {
+  .game.future-mode {
+    min-height: 810px;
+  }
+  .future-mode .unit-row {
+    min-height: 101px;
+    padding: 4px 0;
+    gap: 8px;
+  }
+  .future-mode .unit-card {
+    width: 71px;
+    height: 95px;
+  }
+  .future-mode .unit-name {
+    font-size: 8px;
+    bottom: 24px;
+  }
+  .future-mode .friendly .unit-name {
+    bottom: 29px;
+  }
+  .future-mode .unit-card > .art {
+    bottom: 22px;
+  }
+  .future-mode .unit-stats {
+    bottom: 4px;
+  }
+  .future-mode .friendly .unit-stats {
+    bottom: 9px;
+  }
+  .future-mode .unit-stats .stat b {
+    font-size: 16px;
+  }
+  .future-mode .unit-tags .loan-badge {
+    font-size: 6px;
+    padding: 2px 1px;
+    letter-spacing: 0;
+    gap: 1px;
+  }
+  .future-mode .unit-tags .loan-badge svg {
+    width: 7px;
+    height: 7px;
+  }
+  .future-mode .summon-slot {
+    width: 71px;
+    height: 90px;
+  }
+  .future-mode .selection-hint {
+    height: 23px;
+  }
+  .future-mode .selection-hint > span {
+    font-size: 7px;
+    letter-spacing: 0;
+    max-width: 100%;
+  }
+  .future-mode .future-ledger {
+    padding: 5px 3px 5px;
+    margin: 3px 0;
+    width: 100%;
+  }
+  .future-mode .ledger-heading {
+    font-size: 9px;
+    letter-spacing: 0;
+    gap: 3px;
+    height: 17px;
+    margin-bottom: 3px;
+  }
+  .future-mode .ledger-heading > span {
+    gap: 4px;
+    white-space: nowrap;
+  }
+  .future-mode .ledger-heading > span > svg {
+    width: 10px;
+  }
+  .future-mode .ledger-heading small {
+    display: none;
+  }
+  .future-mode .ledger-heading > button {
+    gap: 2px;
+    font-size: 7px;
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+  .future-mode .ledger-heading > button > svg {
+    width: 8px;
+  }
+  .future-mode .timeline-track {
+    gap: 4px;
+  }
+  .future-mode .timeline-column {
+    padding-left: 3px;
+  }
+  .future-mode .timeline-date {
+    font-size: 7px;
+    gap: 2px;
+    height: 13px;
+  }
+  .future-mode .timeline-date small {
+    font-size: 7px;
+  }
+  .future-mode .timeline-date > svg {
+    display: none;
+  }
+  .future-mode .contract-list {
+    height: 57px;
+    gap: 3px;
+    padding-right: 1px;
+  }
+  .future-mode .contract-entry {
+    min-height: 24px;
+    font-size: 7px;
+    gap: 2px;
+    padding: 4px 2px;
+    letter-spacing: 0;
+  }
+  .future-mode .contract-entry > svg {
+    width: 8px;
+    height: 8px;
+  }
+  .future-mode .empty-future {
+    font-size: 7px;
+    letter-spacing: 0;
+    padding-top: 14px;
+  }
+  .future-mode .card-debt {
+    font-size: 9px;
+    margin-top: 5px;
+    padding-top: 4px;
+    gap: 2px;
+  }
+  .future-mode .card-debt > svg {
+    width: 8px;
+  }
+  .future-mode .has-debt .card-copy {
+    top: 57%;
+  }
+  .future-mode .card-copy p {
+    font-size: 10px;
+    line-height: 1.55;
+  }
+  .future-mode .editor-card .card-copy {
+    top: 57%;
+    left: 10px;
+    right: 10px;
+  }
+  .future-mode .editor-card .card-copy p {
+    font-size: 9px;
+    line-height: 1.55;
+  }
+  .intro-steps {
+    grid-template-columns: 1fr;
+    gap: 17px;
+    margin: 22px 0;
+  }
+  .intro-steps article {
+    padding: 0 0 0 47px;
+    position: relative;
+    border-left: 0;
+  }
+  .intro-steps article > svg {
+    position: absolute;
+    left: 4px;
+    top: 5px;
+    width: 26px;
+    height: 26px;
+    margin: 0;
+  }
+  .intro-steps article > span {
+    font-size: 8px;
+    letter-spacing: 1px;
+  }
+  .intro-steps h3 {
+    font-size: 17px;
+    margin: 6px 0 7px;
+  }
+  .intro-steps p {
+    font-size: 10px;
+    line-height: 1.9;
+  }
+  .intro-combo {
+    margin-top: 21px;
+    padding: 15px 7px;
+    gap: 10px;
+  }
+  .intro-combo > span {
+    font-size: 12px;
+    gap: 5px;
+  }
+  .intro-combo small {
+    font-size: 9px;
+  }
+  .intro-modal .modal h2 {
+    font-size: 22px;
+  }
+  .contract-detail {
+    gap: 14px;
+    padding: 15px 5px 22px;
+  }
+  .contract-detail h3 {
+    font-size: 20px;
+  }
+  .contract-detail p {
+    font-size: 11px;
+  }
+  .contract-detail small {
+    font-size: 9px;
+  }
+  .contract-quick-actions {
+    gap: 8px;
+    margin-top: 19px;
+  }
+  .contract-quick-actions > button {
+    font-size: 10px;
+    padding: 10px;
+  }
+  .contract-quick-actions b {
+    font-size: 9px;
+  }
+  .ledger-rules {
+    font-size: 10px;
+    gap: 14px;
+  }
+  .ledger-rules strong {
+    font-size: 16px;
+  }
+  .settled-ledger p {
+    font-size: 9px;
+    gap: 7px;
+  }
+  .settled-ledger b {
+    font-size: 8px;
+  }
+}
+@media (max-width: 390px) {
+  .future-mode .unit-card {
+    width: 66px;
+    height: 94px;
+  }
+  .future-mode .summon-slot {
+    width: 66px;
+    height: 87px;
+  }
+  .future-mode .unit-row {
+    gap: 6px;
+  }
+  .future-mode .ledger-heading {
+    font-size: 8px;
+  }
+  .future-mode .ledger-heading > button {
+    font-size: 6px;
+  }
+  .future-mode .contract-entry {
+    font-size: 6px;
+  }
+  .future-mode .timeline-date {
+    font-size: 6px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .contract-entry {
+    animation: none !important;
+    transition: none !important;
+  }
+}

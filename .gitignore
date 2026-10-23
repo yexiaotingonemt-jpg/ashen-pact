@@ -1,0 +1,13 @@
+node_modules/
+server.log
+server-error.log
+*.zip
+dist/
+灰烬契约.html
+preview.png
+mobile-preview.png
+design/verification.md
+scratch/
+qa/
+.DS_Store
+
