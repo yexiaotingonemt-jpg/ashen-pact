@@ -14,6 +14,7 @@ import {
   canEditContract,
   contractText,
   upcomingPayment,
+  collectWarning,
 } from "../src/contracts.js";
 const quiet = () => {
   const s = newRun(99);
@@ -455,6 +456,118 @@ test("upcoming payment reflects a real knight death as blood instead of betrayal
   assert.equal(upcomingPayment(s), "");
   s = fallenKnight(true);
   assert.equal(upcomingPayment(s), "3 回合后账面到期：5 生命");
+});
+test("collection warning exposes two blood debts due next boundary without mutating state", () => {
+  let s = play(encounter(2), "borrowedFlame", "boss");
+  s = play(s, "borrowedFlame", "boss");
+  const before = JSON.stringify(s);
+  assert.equal(upcomingPayment(s), "2 回合后账面到期：12 生命");
+  assert.equal(
+    collectWarning(s),
+    "催债预警：下回合提前兑现 12 生命（按当前条款）",
+  );
+  assert.equal(JSON.stringify(s), before);
+  const next = end(s);
+  assert.equal(next.stats.paidLife, 12);
+  assert.equal(next.hero.hp, 28);
+});
+test("collection warning updates after debt transfer, removal, or postponing collection", () => {
+  let s = play(encounter(2), "borrowedFlame", "boss");
+  s = play(s, "borrowedFlame", "boss");
+  s = play(s, "transfer", debt(s).uid);
+  assert.equal(
+    collectWarning(s),
+    "催债预警：下回合提前兑现 6 生命（按当前条款）",
+  );
+  const collection = s.contracts.find((c) => c.effect === "collect");
+  assert.equal(collectWarning(play(s, "sever", debt(s).uid)), "");
+  assert.equal(collectWarning(play(s, "sever", collection.uid)), "");
+  assert.equal(collectWarning(play(s, "defer", collection.uid)), "");
+  assert.equal(collectWarning(quiet()), "");
+});
+test("collection warning names a later deadline when nothing is accelerated into the next turn", () => {
+  let s = play(encounter(2), "borrowedFlame", "boss");
+  s = play(s, "defer", debt(s).uid);
+  assert.equal(debt(s).due, 4);
+  assert.equal(
+    collectWarning(s),
+    "催债预警：下回合将 7 生命提前至第 3 回合（按当前条款）",
+  );
+  s = end(s);
+  assert.equal(debt(s).due, 3);
+  assert.equal(s.stats.paidLife, 0);
+});
+const warningState = (contracts) => ({ turn: 1, contracts });
+const warningDebt = (kind, amount, due = 3, order = 10) => ({
+  uid: `debt-${order}`,
+  owner: "player",
+  kind,
+  amount,
+  due,
+  order,
+});
+const warningOmen = (effect, order) => ({
+  uid: `omen-${order}`,
+  owner: "enemy",
+  kind: "omen",
+  effect,
+  due: 2,
+  order,
+});
+test("collection warning includes mixed accelerated debts but excludes already-due debt", () => {
+  const s = warningState([
+    warningOmen("collect", 1),
+    warningDebt("blood", 6, 3, 10),
+    warningDebt("energy", 2, 3, 11),
+    warningDebt("draw", 2, 3, 12),
+    warningDebt("betrayal", 7, 3, 13),
+    warningDebt("blood", 9, 2, 14),
+    warningDebt("blood", 4, 4, 15),
+  ]);
+  assert.equal(
+    collectWarning(s),
+    "催债预警：下回合提前兑现 6 生命 · 2 能量 · 少抽 2 张 · 1 名随从倒戈；另将 4 生命提前至第 3 回合（按当前条款）",
+  );
+});
+test("two collections dynamically bring a three-turn debt into the next boundary once", () => {
+  const s = warningState([
+    warningOmen("collect", 1),
+    warningOmen("collect", 2),
+    warningDebt("blood", 6, 4, 10),
+    warningDebt("blood", 4, 3, 11),
+  ]);
+  assert.equal(
+    collectWarning(s),
+    "催债预警：下回合提前兑现 10 生命（按当前条款）",
+  );
+});
+test("collection projection respects writ before, between, and after dynamic settlement", () => {
+  const base = [warningOmen("collect", 2), warningDebt("blood", 6, 3, 10)];
+  assert.equal(
+    collectWarning(warningState([...base, warningOmen("writ", 1)])),
+    "催债预警：下回合提前兑现 7 生命（按当前条款）",
+  );
+  assert.equal(
+    collectWarning(warningState([...base, warningOmen("writ", 3)])),
+    "催债预警：下回合提前兑现 7 生命（按当前条款）",
+  );
+  assert.equal(
+    collectWarning(warningState([...base, warningOmen("writ", 11)])),
+    "催债预警：下回合提前兑现 6 生命（按当前条款）",
+  );
+});
+test("writ between two collections affects debts still outstanding at that exact point", () => {
+  const s = warningState([
+    warningOmen("collect", 1),
+    warningDebt("blood", 4, 3, 2),
+    warningOmen("writ", 3),
+    warningOmen("collect", 4),
+    warningDebt("blood", 6, 4, 5),
+  ]);
+  assert.equal(
+    collectWarning(s),
+    "催债预警：下回合提前兑现 11 生命（按当前条款）",
+  );
 });
 test("future ledger survives serialization and rejects corrupt contracts", () => {
   let s = play(quiet(), "borrowedKnight");

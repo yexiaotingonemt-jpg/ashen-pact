@@ -19,6 +19,20 @@
 .payment-reminder svg {
   flex-shrink: 0;
 }
+.future-mode .selection-hint .payment-reminder.collection-warning {
+  color: #ffe0b5;
+  background: #471c16e8;
+  border: 1px solid #c67c50;
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-weight: 600;
+  white-space: normal;
+}
+.future-mode .selection-hint.has-collection-warning {
+  height: auto;
+  min-height: 29px;
+  width: 100%;
+}
 .future-mode .hand-area button {
   pointer-events: auto;
 }

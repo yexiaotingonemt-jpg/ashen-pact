@@ -39,6 +39,7 @@ import {
   Maximize,
   Minimize,
   Clock3,
+  TriangleAlert,
   ArrowLeftRight,
   FilePenLine,
 } from "lucide-react";
@@ -54,6 +55,7 @@ import {
   victoryBill,
   canEditContract,
   upcomingPayment,
+  collectWarning,
 } from "./contracts.js";
 
 const SAVE_KEY = "ashen-pact-future-save-v2";
@@ -626,6 +628,8 @@ export default function App() {
       toast("当前窗口不支持全屏。可使用浏览器缩放调整显示。");
     }
   }
+  const paymentReminder = upcomingPayment(s);
+  const collectionWarning = collectWarning(s);
   const selectionHint =
     selection?.type === "unit"
       ? "选择敌方随从或首领，发动攻击"
@@ -904,7 +908,16 @@ export default function App() {
             </button>
           ))}
         </div>
-        <div className={"selection-hint " + (selection ? "active" : "")}>
+        <div
+          className={
+            "selection-hint " +
+            (selection
+              ? "active"
+              : collectionWarning
+                ? "has-collection-warning"
+                : "")
+          }
+        >
           {selection ? (
             <>
               <Hand size={15} />
@@ -913,14 +926,22 @@ export default function App() {
                 取消 <kbd>Esc</kbd>
               </button>
             </>
-          ) : upcomingPayment(s) ? (
+          ) : paymentReminder ? (
             <button
-              className="payment-reminder"
-              title="按当前契约日期汇总；催债可能使债务提前到期。点击查看账簿。"
+              className={
+                "payment-reminder " +
+                (collectionWarning ? "collection-warning" : "")
+              }
+              aria-label={collectionWarning || paymentReminder}
+              title={`${paymentReminder}。账簿保留原日期；预警按当前公开条款计算，不预测随从阵亡等后续变化。点击查看账簿。`}
               onClick={() => setModal("ledger")}
             >
-              <Clock3 size={12} />
-              {upcomingPayment(s)}
+              {collectionWarning ? (
+                <TriangleAlert size={12} />
+              ) : (
+                <Clock3 size={12} />
+              )}
+              <span role="status">{collectionWarning || paymentReminder}</span>
             </button>
           ) : (
             <span>预支力量，改写代价。点击账簿查看契约。</span>

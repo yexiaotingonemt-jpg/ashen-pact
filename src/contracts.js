@@ -55,12 +55,9 @@ export function victoryBill(state) {
     .reduce((sum, c) => sum + debtValue(c), 0);
 }
 
-export function upcomingPayment(state) {
-  const debts = (state.contracts || []).filter((c) => c.owner === "player");
-  if (!debts.length) return "";
-  const due = Math.min(...debts.map((c) => c.due));
+function paymentSummary(debts) {
   const totals = {};
-  for (const c of debts.filter((c) => c.due === due))
+  for (const c of debts)
     totals[c.kind] =
       (totals[c.kind] || 0) + (c.kind === "betrayal" ? 1 : c.amount);
   const parts = [
@@ -69,7 +66,61 @@ export function upcomingPayment(state) {
     totals.draw && `少抽 ${totals.draw} 张`,
     totals.betrayal && `${totals.betrayal} 名随从倒戈`,
   ].filter(Boolean);
-  return `${due === state.turn + 1 ? "下回合" : `${due - state.turn} 回合后`}账面到期：${parts.join(" · ")}`;
+  return parts.join(" · ");
+}
+
+export function upcomingPayment(state) {
+  const debts = (state.contracts || []).filter((c) => c.owner === "player");
+  if (!debts.length) return "";
+  const due = Math.min(...debts.map((c) => c.due));
+  return `${due === state.turn + 1 ? "下回合" : `${due - state.turn} 回合后`}账面到期：${paymentSummary(debts.filter((c) => c.due === due))}`;
+}
+
+export function collectWarning(state) {
+  const boundary = state.turn + 1;
+  const pending = (state.contracts || []).map((c) => ({ ...c }));
+  if (
+    !pending.some(
+      (c) => c.kind === "omen" && c.effect === "collect" && c.due === boundary,
+    )
+  )
+    return "";
+  const accelerated = new Set();
+  const payments = [];
+  // Project only public clauses at the next boundary. Combat, death, later
+  // choices and resource-shortfall conversion are deliberately not predicted.
+  while (true) {
+    pending.sort((a, b) => a.due - b.due || a.order - b.order);
+    const c = pending[0];
+    if (!c || c.due > boundary) break;
+    pending.shift();
+    if (c.kind === "omen" && c.effect === "collect") {
+      for (const debt of pending.filter((x) => x.owner === "player")) {
+        const due = Math.max(boundary, debt.due - 1);
+        if (due < debt.due) accelerated.add(debt);
+        debt.due = due;
+      }
+    } else if (c.kind === "omen" && c.effect === "writ") {
+      for (const debt of pending.filter((x) => x.owner === "player")) {
+        if (debt.kind === "betrayal") debt.interest = (debt.interest || 0) + 1;
+        else debt.amount++;
+      }
+    } else if (c.owner === "player" && accelerated.has(c)) {
+      payments.push(c);
+    }
+  }
+  const parts = payments.length
+    ? [`下回合提前兑现 ${paymentSummary(payments)}`]
+    : [];
+  const later = pending.filter((c) => accelerated.has(c));
+  for (const due of [...new Set(later.map((c) => c.due))].sort(
+    (a, b) => a - b,
+  )) {
+    parts.push(
+      `${parts.length ? "另将" : "下回合将"} ${paymentSummary(later.filter((c) => c.due === due))}提前至第 ${due} 回合`,
+    );
+  }
+  return parts.length ? `催债预警：${parts.join("；")}（按当前条款）` : "";
 }
 
 export function timeline(state) {
