@@ -313,6 +313,124 @@ test("upgraded armor strike spends at most twelve and ward does not refund its a
   assert.equal(result.state.boss.ward, false);
 });
 
+for (const [difficulty, enemyAttacks, survivingHp, heroHp] of [
+  ["normal", [2, 2, 1], 4, 37],
+  ["eclipse", [3, 3, 2], 1, 36],
+]) {
+  test(`${difficulty}: a first-turn smith survives the actual opening wave and can forge next turn`, () => {
+    let s = newRun(719, difficulty, "armor");
+    const smithCard = s.hand.find((c) => c.key === "shieldSmith");
+    const shieldCard = s.hand.find((c) => c.key === "shield");
+    assert.ok(
+      smithCard && shieldCard,
+      "The fixture uses a real seeded opening",
+    );
+    s = act(s, { type: "play", uid: smithCard.uid });
+    assert.equal(s.notice, "");
+    assert.equal(
+      s.energy,
+      0,
+      "The three-cost core spends the genuine first-turn budget",
+    );
+    const smithId = s.allies[0].uid;
+    const turn = feedback(s, { type: "endTurn" });
+    const playback = enemyTurnPlayback(s);
+    const attacks = playback.frames.filter((f) => f.cue.type === "attack");
+    assert.deepEqual(
+      attacks.map((f) => f.cue.value),
+      enemyAttacks,
+    );
+    assert.ok(attacks.every((f) => f.cue.targetId === smithId));
+    const survivor = turn.state.allies.find((u) => u.uid === smithId);
+    assert.ok(
+      survivor,
+      "The core must not die before getting any forging opportunity",
+    );
+    assert.equal(survivor.hp, survivingHp);
+    assert.equal(survivor.maxHp, 9);
+    assert.equal(survivor.atk, 1);
+    assert.equal(
+      turn.state.hero.hp,
+      heroHp,
+      "Guard stops unit attacks; the boss promise still hits the hero",
+    );
+    assert.equal(turn.state.energy, 4);
+    const forged = feedback(turn.state, { type: "play", uid: shieldCard.uid });
+    const afterForge = forged.state.allies.find((u) => u.uid === smithId);
+    assert.equal(afterForge.hp, survivingHp);
+    assert.equal(afterForge.atk, 3);
+    assert.equal(forged.state.energy, 3);
+    assert.equal(forged.state.hero.shield, 7);
+    assert.equal(ability(forged, "锻甲").length, 1);
+    assert.equal(ability(forged, "锻甲")[0].sourceId, smithId);
+    assert.equal(cardInfo({ key: "shieldSmith", upgraded: true }).hp, 11);
+  });
+}
+
+test("a first-turn doctor keeps the two-plus-one healing combo while its next ordinary attack is one", () => {
+  let s = newRun(4, "normal", "healing");
+  const doctorCard = s.hand.find((c) => c.key === "lifeweaver");
+  const mercyCard = s.hand.find((c) => c.key === "mercy");
+  assert.ok(
+    doctorCard && mercyCard,
+    "The combo uses only naturally dealt opening cards",
+  );
+  s = act(s, { type: "play", uid: doctorCard.uid });
+  assert.equal(s.notice, "");
+  assert.equal(s.energy, 1);
+  const doctorId = s.allies[0].uid;
+  const combo = feedback(s, {
+    type: "play",
+    uid: mercyCard.uid,
+    target: "boss",
+  });
+  assert.equal(combo.state.energy, 0);
+  assert.equal(combo.state.hero.hp, 40);
+  assert.equal(
+    combo.state.boss.hp,
+    21,
+    "Three spell damage plus two full-health retaliation damage",
+  );
+  assert.equal(ability(combo, "返照").length, 1);
+  assert.equal(ability(combo, "返照")[0].value, 2);
+  assert.equal(ability(combo, "返照")[0].overheal, 3);
+  s = act(combo.state, { type: "endTurn" });
+  const doctor = s.allies.find((u) => u.uid === doctorId);
+  assert.ok(doctor && doctor.ready);
+  assert.equal(doctor.atk, 1);
+  const attacked = feedback(s, {
+    type: "attack",
+    uid: doctorId,
+    target: "boss",
+  });
+  assert.equal(s.boss.hp - attacked.state.boss.hp, 1);
+  assert.equal(
+    ability(attacked, "返照").length,
+    0,
+    "Ordinary attacks do not spend the healing payoff budget",
+  );
+});
+
+test("upgraded doctor attacks for two while retaining its original healing payoff limits", () => {
+  assert.equal(cardInfo({ key: "lifeweaver" }).atk, 1);
+  assert.equal(cardInfo({ key: "lifeweaver", upgraded: true }).atk, 2);
+  let s = use(quiet("healing"), "lifeweaver", undefined, true);
+  s.allies[0].ready = true;
+  const attacked = feedback(s, {
+    type: "attack",
+    uid: s.allies[0].uid,
+    target: "boss",
+  });
+  assert.equal(attacked.state.boss.hp, 98);
+  s = attacked.state;
+  for (let index = 0; index < 3; index++) {
+    const healed = feedback(s, prepare(s, "mend"));
+    assert.equal(healed.state.boss.hp, 98 - Math.min(2, index + 1) * 2);
+    assert.equal(ability(healed, "返照").length, index < 2 ? 1 : 0);
+    s = healed.state;
+  }
+});
+
 test("forging grows only once per turn, with the ring's new-turn armor in the new budget", () => {
   let s = use(quiet("armor"), "shieldSmith");
   const id = s.allies[0].uid;

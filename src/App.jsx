@@ -494,6 +494,21 @@ export default function App() {
     } catch {}
   }, [prefs]);
   useEffect(() => {
+    if (selection?.type !== "card") return;
+    const hand = document.querySelector(".game .hand");
+    const card = [...(hand?.querySelectorAll("[data-instance-id]") || [])].find(
+      (node) => node.dataset.instanceId === selection.uid,
+    );
+    if (!card) return;
+    const rail = hand.getBoundingClientRect(),
+      bounds = card.getBoundingClientRect();
+    // Scroll only the card rail, keeping the battlefield and targets in place.
+    if (bounds.left < rail.left + 8)
+      hand.scrollLeft += bounds.left - rail.left - 8;
+    else if (bounds.right > rail.right - 8)
+      hand.scrollLeft += bounds.right - rail.right + 8;
+  }, [selection?.type, selection?.uid]);
+  useEffect(() => {
     if (busy) return;
     if (s.notice) toast(s.notice);
     if (s.announcement) {
@@ -1409,7 +1424,7 @@ export default function App() {
       <footer className="footer">
         <span className="desktop-controls">
           <Hand size={14} />
-          点击卡牌，再选择目标<span>·</span>
+          点击卡牌与目标 · 手牌可左右滚动<span>·</span>
           <kbd>1–8</kbd>选牌<span>·</span>
           <kbd>空格</kbd>结束回合
         </span>

@@ -933,3 +933,58 @@
     transition: none !important;
   }
 }
+
+/* Keep every card's visual and pointer area in the same stable rectangle. */
+.future-mode .hand-area {
+  overflow: hidden;
+}
+.future-mode .hand {
+  pointer-events: auto;
+  justify-content: flex-start;
+  gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 10px 12px 8px;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: 12px;
+  scroll-snap-type: none;
+  scrollbar-width: thin;
+  scrollbar-color: #a58e59 #101c17;
+}
+.future-mode .hand::-webkit-scrollbar {
+  height: 7px;
+}
+.future-mode .hand::-webkit-scrollbar-thumb {
+  background: #a58e59;
+  border-radius: 5px;
+}
+.future-mode .hand .play-card,
+.future-mode .hand .play-card:hover,
+.future-mode .hand .play-card:focus-visible,
+.future-mode .hand .play-card.selected {
+  transform: none;
+  z-index: 0 !important;
+  height: min(var(--card-h), 100%);
+}
+.future-mode .hand .play-card + .play-card {
+  margin-left: 0;
+}
+.future-mode .hand .play-card:first-child {
+  margin-left: auto;
+}
+.future-mode .hand .play-card:last-child {
+  margin-right: auto;
+}
+/* The ledger and both rows share the battlefield's allocated grid height. */
+.future-mode .unit-row {
+  min-height: 0;
+}
+.future-mode .unit-card,
+.future-mode .summon-slot {
+  max-height: 100%;
+}
+@media (min-width: 981px) {
+  .future-mode .hand {
+    margin-left: 104px;
+  }
+}
