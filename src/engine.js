@@ -40,6 +40,31 @@ function log(s, text, kind = "info") {
 function fx(s, type, target, value) {
   s.effects.push({ id: s.nextId++, type, target, value });
 }
+function unitTrigger(
+  feedback,
+  unit,
+  ability,
+  targetId,
+  targetName,
+  effectType,
+  value,
+  label,
+  details = {},
+) {
+  if (!feedback) return;
+  feedback.triggers.push({
+    sourceId: unit.uid,
+    sourceName: unit.name,
+    sourceArt: unit.art,
+    targetId,
+    targetName,
+    ability,
+    effectType,
+    value,
+    label,
+    ...details,
+  });
+}
 function heal(s, target, n) {
   const got = Math.min(n, target.maxHp - target.hp);
   target.hp += got;
@@ -47,6 +72,7 @@ function heal(s, target, n) {
   return got;
 }
 function draw(s, n) {
+  const results = [];
   for (let i = 0; i < n; i++) {
     if (!s.draw.length && s.discard.length) {
       s.draw = shuffled(s, s.discard);
@@ -55,24 +81,101 @@ function draw(s, n) {
     }
     if (!s.draw.length) {
       s.fatigue++;
+      const hp = s.hero.hp,
+        shield = s.hero.shield;
       damage(s, s.hero, s.fatigue);
       log(s, `牌库耗尽，疲劳造成 ${s.fatigue} 点伤害。`, "bad");
+      results.push({
+        requested: 1,
+        drawn: 0,
+        discarded: 0,
+        drawnIds: [],
+        fatigueDamage: hp - s.hero.hp,
+        fatigueBlocked: shield - s.hero.shield,
+        fatigueAmount: s.fatigue,
+      });
       continue;
     }
     const c = s.draw.pop();
     if (s.hand.length >= 8) {
       s.discard.push(c);
       log(s, `手牌已满，${cardInfo(c).name} 进入弃牌堆。`);
+      results.push({
+        requested: 1,
+        drawn: 0,
+        discarded: 1,
+        drawnIds: [],
+        fatigueDamage: 0,
+        cardId: c.uid,
+        cardName: cardInfo(c).name,
+      });
     } else {
       s.hand.push(c);
+      results.push({
+        requested: 1,
+        drawn: 1,
+        discarded: 0,
+        drawnIds: [c.uid],
+        fatigueDamage: 0,
+        cardId: c.uid,
+        cardName: cardInfo(c).name,
+      });
     }
   }
+  return results;
 }
-function damage(s, target, n) {
+function unitDraw(s, units, ability, feedback) {
+  const results = draw(s, units.length);
+  units.forEach((unit, index) => {
+    const result = results[index];
+    const fatigued = !!result.fatigueAmount;
+    unitTrigger(
+      feedback,
+      unit,
+      ability,
+      fatigued ? "hero" : "hand",
+      fatigued ? "你" : "手牌",
+      fatigued ? "fatigue" : result.discarded ? "discard" : "draw",
+      fatigued ? result.fatigueDamage : result.discarded || result.drawn,
+      fatigued
+        ? `牌库耗尽，疲劳损失 ${result.fatigueDamage} 生命${result.fatigueBlocked ? `（护甲抵挡 ${result.fatigueBlocked}）` : ""}`
+        : result.discarded
+          ? `手牌已满，${result.cardName}进入弃牌堆`
+          : `抽 ${result.drawn} 张牌`,
+      result,
+    );
+  });
+}
+function unitHeal(s, unit, ability, feedback) {
+  const value = heal(s, s.hero, 2);
+  unitTrigger(
+    feedback,
+    unit,
+    ability,
+    "hero",
+    "你",
+    "heal",
+    value,
+    value ? `恢复 ${value} 生命` : "已满血，恢复 0 生命",
+    { requested: 2, overheal: 2 - value },
+  );
+}
+function damage(s, target, n, feedback) {
   if (n <= 0) return 0;
   if (target.ward) {
     target.ward = false;
     fx(s, "ward", target.uid, "圣盾");
+    if (s.allies.some((u) => u.uid === target.uid))
+      unitTrigger(
+        feedback,
+        target,
+        "圣盾",
+        target.uid,
+        target.name,
+        "ward",
+        n,
+        `抵消 ${n} 点伤害`,
+      );
     return 0;
   }
   const blocked = Math.min(target.shield || 0, n);
@@ -118,7 +221,7 @@ function bloodPayment(s, target, amount) {
   else s.stats.damage += amount;
 }
 
-function settleContract(s, c, context = { drawBudget: 2 }) {
+function settleContract(s, c, context = { drawBudget: 2 }, feedback) {
   takeContract(s, c);
   log(
     s,
@@ -184,8 +287,22 @@ function settleContract(s, c, context = { drawBudget: 2 }) {
     }
     if (c.rage) damage(s, s.hero, c.rage);
   }
-  const witnesses = s.allies.filter((u) => u.tags.includes("见证")).length;
-  if (witnesses) armor(s, witnesses);
+  const witnesses = s.allies.filter((u) => u.tags.includes("见证"));
+  if (witnesses.length) {
+    armor(s, witnesses.length);
+    for (const unit of witnesses)
+      unitTrigger(
+        feedback,
+        unit,
+        "见证",
+        "hero",
+        "你",
+        "armor",
+        1,
+        "契约兑现，护甲 +1",
+        { contractId: c.uid },
+      );
+  }
 }
 
 function queueOmens(s) {
@@ -203,14 +320,16 @@ function queueOmens(s) {
   }
 }
 
-function recordFrame(s, record, before, cue) {
+function recordFrame(s, record, before, cue, feedback, triggerStart = 0) {
   if (!record) return;
   record({
     before,
     after: clone(s),
     cue: clone(cue),
     effects: clone(s.effects.slice(before.effects.length)),
+    triggers: clone(feedback?.triggers.slice(triggerStart) || []),
   });
+  if (feedback) feedback.frameEnd = feedback.triggers.length;
 }
 
 function contractCue(before, after, c) {
@@ -243,7 +362,7 @@ function contractCue(before, after, c) {
   };
 }
 
-function resolveDue(s, record) {
+function resolveDue(s, record, feedback) {
   const context = { drawBudget: 2 };
   for (let safety = 0; safety < 60; safety++) {
     const c = s.contracts
@@ -251,15 +370,24 @@ function resolveDue(s, record) {
       .sort((a, b) => a.due - b.due || a.order - b.order)[0];
     if (!c) return context;
     const before = record ? clone(s) : null;
-    settleContract(s, c, context);
+    const triggerStart = feedback?.triggers.length || 0;
+    settleContract(s, c, context, feedback);
     const ended = check(s);
-    if (record) recordFrame(s, record, before, contractCue(before, s, c));
+    if (record)
+      recordFrame(
+        s,
+        record,
+        before,
+        contractCue(before, s, c),
+        feedback,
+        triggerStart,
+      );
     if (ended) return context;
   }
   throw new Error("契约结算超出安全上限。");
 }
 
-function manipulate(s, c, effect) {
+function manipulate(s, c, effect, feedback) {
   if (effect === "transfer") {
     c.amount = debtValue(c);
     c.kind = "blood";
@@ -295,13 +423,13 @@ function manipulate(s, c, effect) {
     log(s, `「${c.source}」被焚毁，不再兑现。`, "good");
   } else if (effect === "foreclose") {
     c.amount += 2;
-    settleContract(s, c);
+    settleContract(s, c, undefined, feedback);
   }
   s.stats.weaves++;
   if (!s.weaverDrawn) {
-    const n = s.allies.filter((u) => u.tags.includes("书契")).length;
-    if (n) {
-      draw(s, n);
+    const weavers = s.allies.filter((u) => u.tags.includes("书契"));
+    if (weavers.length) {
+      unitDraw(s, weavers, "书契", feedback);
       s.weaverDrawn = true;
     }
   }
@@ -601,7 +729,7 @@ export function validTargets(s, selection) {
     ? guards.map((u) => u.uid)
     : ["boss", ...s.enemies.map((u) => u.uid)];
 }
-function play(s, a) {
+function play(s, a, feedback) {
   const idx = s.hand.findIndex((c) => c.uid === a.uid);
   requireThat(idx >= 0, "这张牌已经不在手中。");
   const c = s.hand[idx],
@@ -645,9 +773,20 @@ function play(s, a) {
       u.loanContractId = contract.uid;
     }
     fx(s, "summon", u.uid, "召唤");
-    if (d.tags.includes("启示")) draw(s, 1);
+    if (d.tags.includes("突袭"))
+      unitTrigger(
+        feedback,
+        u,
+        "突袭",
+        u.uid,
+        u.name,
+        "ready",
+        1,
+        "入场即可攻击",
+      );
+    if (d.tags.includes("启示")) unitDraw(s, [u], "启示", feedback);
   } else {
-    if (d.contractEffect) manipulate(s, t, d.contractEffect);
+    if (d.contractEffect) manipulate(s, t, d.contractEffect, feedback);
     if (d.damage) {
       const dealt = damage(s, t, d.damage);
       s.stats.damage += dealt;
@@ -678,6 +817,16 @@ function play(s, a) {
     for (const u of s.allies.filter((u) => u.tags.includes("共鸣"))) {
       u.atk++;
       fx(s, "buff", u.uid, "+1 攻击");
+      unitTrigger(
+        feedback,
+        u,
+        "共鸣",
+        u.uid,
+        u.name,
+        "buff",
+        1,
+        "施放法术，攻击 +1",
+      );
     }
     if (s.relics.includes("quill") && !s.firstSpell) {
       s.firstSpell = true;
@@ -690,7 +839,7 @@ function play(s, a) {
   else s.discard.push(c);
   check(s);
 }
-function attack(s, a) {
+function attack(s, a, feedback) {
   const u = s.allies.find((u) => u.uid === a.uid);
   requireThat(u && u.ready, "该随从本回合无法攻击。");
   requireThat(
@@ -703,8 +852,8 @@ function attack(s, a) {
   fx(s, "attack", u.uid, "");
   const dealt = damage(s, t, u.atk);
   s.stats.damage += dealt;
-  if (a.target !== "boss") damage(s, u, t.atk);
-  if (u.tags.includes("汲取") && dealt > 0) heal(s, s.hero, 2);
+  if (a.target !== "boss") damage(s, u, t.atk, feedback);
+  if (u.tags.includes("汲取") && dealt > 0) unitHeal(s, u, "汲取", feedback);
   log(s, `${u.name}攻击${t.name}，造成 ${dealt} 点伤害。`, "good");
   check(s);
 }
@@ -727,7 +876,7 @@ function burnTick(s, t) {
     t.burn--;
   }
 }
-function endTurn(s, record) {
+function endTurn(s, record, feedback) {
   s.announcement = "新的回合";
   // Damage-over-time resolves before attacks; a dying enemy never gets to attack.
   const burning = [s.boss, ...s.enemies].filter((u) => u.burn > 0);
@@ -735,19 +884,27 @@ function endTurn(s, record) {
   for (let index = 0; index < burning.length; index++) {
     const u = burning[index];
     const before = record ? clone(s) : null;
+    const triggerStart = feedback?.triggers.length || 0;
     const amount = u.burn;
     burnTick(s, u);
     // Preserve the existing batch cleanup and victory check after ALL burn ticks.
     if (index === burning.length - 1) ended = check(s);
-    recordFrame(s, record, before, {
-      type: "burn",
-      sourceId: u.uid,
-      sourceName: u.name,
-      targetId: u.uid,
-      targetName: u.name,
-      label: `${u.name}受到灼烧`,
-      value: amount,
-    });
+    recordFrame(
+      s,
+      record,
+      before,
+      {
+        type: "burn",
+        sourceId: u.uid,
+        sourceName: u.name,
+        targetId: u.uid,
+        targetName: u.name,
+        label: `${u.name}受到灼烧`,
+        value: amount,
+      },
+      feedback,
+      triggerStart,
+    );
   }
   if (!burning.length) ended = check(s);
   if (ended) return;
@@ -761,7 +918,20 @@ function endTurn(s, record) {
       .sort((a, b) => b.atk - a.atk)[0];
     const target = guards[0] || killable || s.hero;
     const before = record ? clone(s) : null;
-    const dealt = damage(s, target, u.atk);
+    const triggerStart = feedback?.triggers.length || 0;
+    if (guards.length)
+      unitTrigger(
+        feedback,
+        target,
+        "守卫",
+        target.uid,
+        target.name,
+        "guard",
+        u.atk,
+        `拦截${u.name}的攻击`,
+        { attackerId: u.uid, attackerName: u.name },
+      );
+    const dealt = damage(s, target, u.atk, feedback);
     if (target.uid !== "hero") damage(s, u, target.atk);
     if (u.tags.includes("汲取") && dealt) heal(s, s.boss, 2);
     log(
@@ -770,29 +940,36 @@ function endTurn(s, record) {
       "bad",
     );
     const ended = check(s);
-    recordFrame(s, record, before, {
-      type: "attack",
-      sourceId: u.uid,
-      sourceName: u.name,
-      targetId: target.uid,
-      targetName: target.name || "你",
-      label: `${u.name}攻击${target.name || "你"}`,
-      value: u.atk,
-      damage: dealt,
-    });
+    recordFrame(
+      s,
+      record,
+      before,
+      {
+        type: "attack",
+        sourceId: u.uid,
+        sourceName: u.name,
+        targetId: target.uid,
+        targetName: target.name || "你",
+        label: `${u.name}攻击${target.name || "你"}`,
+        value: u.atk,
+        damage: dealt,
+      },
+      feedback,
+      triggerStart,
+    );
     if (ended) return;
   }
   s.turn++;
   s.maxEnergy = Math.min(8, s.maxEnergy + 1);
   s.energy = s.maxEnergy;
-  const settlement = resolveDue(s, record);
+  const settlement = resolveDue(s, record, feedback);
   if (s.phase !== "battle") return;
   s.skillUsed = false;
   s.firstSpell = false;
   s.weaverDrawn = false;
   for (const u of s.allies) {
     u.ready = true;
-    if (u.tags.includes("复苏")) heal(s, s.hero, 2);
+    if (u.tags.includes("复苏")) unitHeal(s, u, "复苏", feedback);
   }
   if (s.relics.includes("ring")) armor(s, 2);
   draw(s, settlement.drawBudget);
@@ -807,7 +984,7 @@ function postReward(s) {
     s.relicOffer = shuffled(s, available).slice(0, 3);
   } else s.phase = "camp";
 }
-function transition(original, a, record) {
+function transition(original, a, record, feedback) {
   const s = clone(original);
   s.effects = [];
   s.notice = "";
@@ -816,10 +993,10 @@ function transition(original, a, record) {
   try {
     if (["play", "attack", "skill", "endTurn"].includes(a.type))
       requireThat(s.phase === "battle", "当前不在战斗中。");
-    if (a.type === "play") play(s, a);
-    else if (a.type === "attack") attack(s, a);
+    if (a.type === "play") play(s, a, feedback);
+    else if (a.type === "attack") attack(s, a, feedback);
     else if (a.type === "skill") skill(s, a);
-    else if (a.type === "endTurn") endTurn(s, record);
+    else if (a.type === "endTurn") endTurn(s, record, feedback);
     else if (a.type === "reward") {
       requireThat(s.phase === "reward", "当前无法领取战利品。");
       if (a.key === "heal") {
@@ -874,14 +1051,30 @@ export function act(original, a) {
   return transition(original, a);
 }
 
+export function actionFeedback(original, action) {
+  const feedback = { triggers: [] };
+  const state = transition(original, action, undefined, feedback);
+  return { state, triggers: state.notice ? [] : feedback.triggers };
+}
+
 // Presentation metadata stays outside saved state. The final state uses the
 // same transition as act(); callers must persist it, never the playback frames.
 export function enemyTurnPlayback(original) {
   const frames = [];
-  const state = transition(original, { type: "endTurn" }, (frame) =>
-    frames.push(frame),
+  const feedback = { triggers: [], frameEnd: 0 };
+  const state = transition(
+    original,
+    { type: "endTurn" },
+    (frame) => frames.push(frame),
+    feedback,
   );
-  return { state, frames: state.notice ? [] : frames };
+  return {
+    state,
+    frames: state.notice ? [] : frames,
+    tailTriggers: state.notice
+      ? []
+      : clone(feedback.triggers.slice(feedback.frameEnd)),
+  };
 }
 
 export function validateSave(s) {

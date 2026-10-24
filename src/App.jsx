@@ -45,7 +45,7 @@ import {
 } from "lucide-react";
 import { CARDS, cardInfo, ENCOUNTERS, RELICS, DIFFICULTIES } from "./data.js";
 import {
-  act,
+  actionFeedback,
   newRun,
   intent,
   validTargets,
@@ -58,6 +58,8 @@ import CombatPlayback, {
   combatClass,
   impactView,
   actionCaption,
+  abilityClass,
+  abilityCaption,
 } from "./CombatPlayback.jsx";
 import {
   contractLabel,
@@ -146,6 +148,8 @@ function Card({
   onClick,
   selected = false,
   disabled = false,
+  locked = false,
+  revealed = false,
   mini = false,
   detail = false,
   index = 0,
@@ -154,14 +158,15 @@ function Card({
   const Element = onClick ? "button" : "article";
   return (
     <Element
-      className={`play-card ${d.type} ${d.debt ? "has-debt" : ""} ${d.contractEffect ? "editor-card" : ""} ${selected ? "selected" : ""} ${disabled ? "unaffordable" : ""} ${mini ? "mini" : ""} ${detail ? "detail" : ""} ${card.upgraded ? "upgraded" : ""}`}
+      className={`play-card ${d.type} ${d.debt ? "has-debt" : ""} ${d.contractEffect ? "editor-card" : ""} ${selected ? "selected" : ""} ${disabled ? "unaffordable" : ""} ${mini ? "mini" : ""} ${detail ? "detail" : ""} ${card.upgraded ? "upgraded" : ""} ${revealed ? "ability-drawn" : ""}`}
       style={{ "--fan": `${index}deg`, "--dip": `${Math.abs(index) * 2}px` }}
       onClick={onClick}
       aria-label={`${onClick ? "选择" : "查看"} ${d.name}，${d.cost} 能量`}
       data-card-key={card.key}
       data-instance-id={card.uid}
+      data-combat-id={card.uid}
       aria-pressed={onClick ? selected : undefined}
-      aria-disabled={disabled || undefined}
+      aria-disabled={disabled || locked || undefined}
       title={`${d.name} · ${d.rarity}\n${d.text}${d.debt ? "\n" + debtCaption(d.debt) : ""}\n${d.flavor}`}
     >
       <div className="card-frame">
@@ -217,10 +222,11 @@ function Unit({
   loanDue,
   combatCue,
   combatGeometry,
+  abilityCue,
 }) {
   return (
     <button
-      className={`unit-card ${enemy ? "enemy" : "friendly"} ${unit.ready && !enemy ? "ready" : ""} ${selected ? "selected" : ""} ${valid ? "targetable" : ""} ${unit.ward ? "warded" : ""} ${effects.some((e) => e.type === "attack" && e.target === unit.uid) ? "just-attacked" : ""} ${combatClass(combatCue, unit.uid)} ${unit.fallen ? "combat-fallen" : ""}`}
+      className={`unit-card ${enemy ? "enemy" : "friendly"} ${unit.ready && !enemy && !unit.fallen ? "ready" : ""} ${selected ? "selected" : ""} ${valid ? "targetable" : ""} ${unit.ward ? "warded" : ""} ${effects.some((e) => e.type === "attack" && e.target === unit.uid) ? "just-attacked" : ""} ${combatClass(combatCue, unit.uid)} ${unit.fallen ? "combat-fallen" : ""} ${abilityClass(abilityCue, unit.uid)}`}
       style={
         combatCue?.sourceId === unit.uid && combatGeometry
           ? {
@@ -233,21 +239,30 @@ function Unit({
       data-unit-key={unit.key}
       data-target-id={unit.uid}
       data-combat-id={unit.uid}
+      data-ability={
+        abilityCue?.sourceId === unit.uid ? abilityCue.ability : undefined
+      }
       title={`${unit.name}：${CARDS[unit.key]?.text || unit.tags.join(" · ") || "暗影中的敌人。"}${unit.burn ? ` 灼烧 ${unit.burn} 层。` : ""}`}
-      aria-label={`${unit.name}，${unit.atk} 攻击，${unit.hp} 生命${unit.ready && !enemy ? "，可以攻击" : ""}`}
+      aria-label={`${unit.name}，${unit.atk} 攻击，${unit.hp} 生命${unit.fallen ? "，阵亡" : unit.ready && !enemy ? "，可以攻击" : ""}`}
     >
       <Art index={unit.art} />
       <span className="unit-shadow" />
-      {combatCue?.targetId === unit.uid && (
-        <span className="combat-unit-label">
-          {combatCue.type === "summon"
-            ? "召唤入场"
-            : combatCue.type === "attack"
-              ? "攻击目标"
-              : combatCue.type === "burn"
-                ? "灼烧"
-                : "契约兑现"}
+      {abilityCue?.sourceId === unit.uid ? (
+        <span key={abilityCue.id} className="ability-unit-label">
+          {abilityCue.ability} · 触发
         </span>
+      ) : (
+        combatCue?.targetId === unit.uid && (
+          <span className="combat-unit-label">
+            {combatCue.type === "summon"
+              ? "召唤入场"
+              : combatCue.type === "attack"
+                ? "攻击目标"
+                : combatCue.type === "burn"
+                  ? "灼烧"
+                  : "契约兑现"}
+          </span>
+        )
       )}
       <span className="unit-name">{unit.name}</span>
       <div className="unit-tags">
@@ -280,7 +295,9 @@ function Unit({
         <Stat type="hp">{unit.hp}</Stat>
       </div>
       {!enemy && (
-        <span className="unit-state">{unit.ready ? "可攻击" : "休整中"}</span>
+        <span className="unit-state">
+          {unit.fallen ? "阵亡" : unit.ready ? "可攻击" : "休整中"}
+        </span>
       )}
       <Effects effects={effects} target={unit.uid} />
     </button>
@@ -399,6 +416,8 @@ export default function App() {
   const [savedState, setS] = useState(load),
     [playbackState, setPlaybackState] = useState(null),
     [combatCue, setCombatCue] = useState(null),
+    [abilityCue, setAbilityCue] = useState(null),
+    [playbackSide, setPlaybackSide] = useState("enemy"),
     [combatGeometry, setCombatGeometry] = useState(null),
     [prefs, setPrefs] = useState(settings),
     [selection, setSelection] = useState(null),
@@ -510,21 +529,60 @@ export default function App() {
     noticeTimer.current = setTimeout(() => setNotice(""), 3000);
   }
   function dispatch(a) {
-    if (busy) return;
-    const next = act(stateRef.current, a);
-    setS(next);
+    if (busyRef.current || busy) return;
+    const original = stateRef.current;
+    const { state: next, triggers } = actionFeedback(original, a);
+    const frames = [];
+    if (!next.notice && original.phase === "battle") {
+      const arriving =
+        a.type === "play" &&
+        next.allies.find(
+          (u) => !original.allies.some((old) => old.uid === u.uid),
+        );
+      const source = original.allies.find((u) => u.uid === a.uid);
+      const target =
+        a.target === "boss"
+          ? original.boss
+          : original.enemies.find((u) => u.uid === a.target);
+      if (arriving || (a.type === "attack" && source && target))
+        frames.push({
+          before: original,
+          after: next,
+          effects: next.effects,
+          triggers,
+          cue: {
+            type: arriving ? "summon" : "attack",
+            side: "player",
+            sourceId: arriving?.uid || source.uid,
+            sourceName: arriving?.name || source.name,
+            targetId: arriving?.uid || target.uid,
+            targetName: arriving?.name || target.name,
+          },
+        });
+    }
+    if (!next.notice && (frames.length || triggers.length))
+      beginPlayback(
+        { state: next, frames, tailTriggers: frames.length ? [] : triggers },
+        "player",
+        original,
+      );
+    else {
+      stateRef.current = next;
+      setS(next);
+    }
     if (!next.notice) {
       setSelection(null);
-      sound(
-        next.phase === "reward" || next.phase === "won"
-          ? "win"
-          : a.type === "attack" || a.type === "skill"
-            ? "hit"
-            : a.type === "endTurn"
-              ? "turn"
-              : "card",
-        prefs.audio,
-      );
+      if (!frames.length && !triggers.length)
+        sound(
+          next.phase === "reward" || next.phase === "won"
+            ? "win"
+            : a.type === "attack" || a.type === "skill"
+              ? "hit"
+              : a.type === "endTurn"
+                ? "turn"
+                : "card",
+          prefs.audio,
+        );
     }
     return next;
   }
@@ -641,7 +699,13 @@ export default function App() {
   function finishTurn() {
     if (busyRef.current || modal || stateRef.current.phase !== "battle") return;
     const original = stateRef.current;
-    const { state: result, frames } = enemyTurnPlayback(original);
+    beginPlayback(enemyTurnPlayback(original), "enemy", original);
+  }
+  function beginPlayback(
+    { state: result, frames = [], tailTriggers = [] },
+    side,
+    original,
+  ) {
     if (result.notice) {
       setS(result);
       return;
@@ -658,20 +722,27 @@ export default function App() {
     // Persist the completed turn once; visual snapshots never become save data.
     stateRef.current = next;
     setS(next);
-    setPlaybackState({ ...original, effects: [], announcement: "" });
+    setPlaybackState({
+      ...(frames.length ? original : next),
+      effects: frames.length ? [] : next.effects,
+      phase: "battle",
+      announcement: "",
+    });
     setSelection(null);
     setBusy(true);
+    setPlaybackSide(side);
+    setAbilityCue(null);
     setAnnouncement("");
     clearTimeout(announceTimer.current);
-    sound("turn", prefs.audio);
-    function showFrame(index) {
+    if (side === "enemy") sound("turn", prefs.audio);
+    function complete() {
       if (token !== playbackToken.current) return;
-      const frame = frames[index];
-      if (!frame) {
-        setPlaybackState(null);
-        setCombatCue(null);
-        busyRef.current = false;
-        setBusy(false);
+      setPlaybackState(null);
+      setCombatCue(null);
+      setAbilityCue(null);
+      busyRef.current = false;
+      setBusy(false);
+      if (side === "enemy" || ["lost", "reward", "won"].includes(next.phase))
         sound(
           next.phase === "lost"
             ? "hit"
@@ -680,12 +751,57 @@ export default function App() {
               : "turn",
           prefs.audio,
         );
+    }
+    function showTriggers(triggers, after, index = 0, prefix = "tail") {
+      if (token !== playbackToken.current) return;
+      const trigger = triggers[index];
+      if (!trigger) {
+        setAbilityCue(null);
+        after();
         return;
       }
+      setAbilityCue({ ...trigger, id: `${token}-${prefix}-${index}` });
+      sound(
+        trigger.effectType === "heal" && trigger.value > 0 ? "heal" : "card",
+        prefs.audio,
+      );
+      timer.current = setTimeout(
+        () => showTriggers(triggers, after, index + 1, prefix),
+        380,
+      );
+    }
+    function showFrame(index) {
+      if (token !== playbackToken.current) return;
+      const frame = frames[index];
+      if (!frame) {
+        setCombatCue(null);
+        setPlaybackState({ ...next, phase: "battle", announcement: "" });
+        showTriggers(tailTriggers, complete);
+        return;
+      }
+      setAbilityCue(null);
       const cue = { ...frame.cue, id: `${token}-${index}`, phase: "windup" };
-      const lead = cue.type === "attack" ? 180 : 100;
+      const lead =
+        cue.type === "attack" ? (side === "player" ? 140 : 180) : 100;
       const hold =
-        cue.type === "summon" ? 560 : cue.type === "attack" ? 320 : 280;
+        cue.type === "summon"
+          ? side === "player"
+            ? 320
+            : 560
+          : cue.type === "attack"
+            ? side === "player"
+              ? 240
+              : 320
+            : 280;
+      const defensive =
+        side === "enemy" && cue.type === "attack"
+          ? (frame.triggers || []).filter((t) =>
+              ["守卫", "圣盾"].includes(t.ability),
+            )
+          : [];
+      const following = (frame.triggers || []).filter(
+        (t) => !defensive.includes(t),
+      );
       setPlaybackState({
         ...frame.before,
         effects: [],
@@ -701,14 +817,33 @@ export default function App() {
           phase: "battle",
         });
         setCombatCue({ ...cue, phase: "impact" });
+        if (defensive.length)
+          setAbilityCue({
+            ...defensive[0],
+            id: `${token}-defence-${index}`,
+            ability: defensive.map((t) => t.ability).join(" · "),
+            label: defensive.map((t) => t.label).join("；"),
+            defensive: true,
+          });
         sound(
           frame.effects.some((e) => e.type === "hit") ? "hit" : "card",
           prefs.audio,
         );
-        timer.current = setTimeout(() => showFrame(index + 1), hold);
+        timer.current = setTimeout(() => {
+          if (following.length) {
+            setCombatCue(null);
+            setPlaybackState((view) => ({ ...view, effects: [] }));
+          }
+          showTriggers(
+            following,
+            () => showFrame(index + 1),
+            0,
+            `frame-${index}`,
+          );
+        }, hold);
       }, lead);
     }
-    timer.current = setTimeout(() => showFrame(0), 150);
+    timer.current = setTimeout(() => showFrame(0), side === "enemy" ? 150 : 30);
   }
   function restart() {
     clearTimeout(timer.current);
@@ -716,6 +851,7 @@ export default function App() {
     busyRef.current = false;
     setPlaybackState(null);
     setCombatCue(null);
+    setAbilityCue(null);
     setBusy(false);
     setS(newRun(Date.now(), difficulty));
     setSelection(null);
@@ -733,6 +869,22 @@ export default function App() {
   }
   const paymentReminder = upcomingPayment(s);
   const collectionWarning = collectWarning(s);
+  const activeLink =
+    combatCue?.type === "attack"
+      ? combatCue
+      : abilityCue
+        ? {
+            ...abilityCue,
+            targetId:
+              abilityCue.drawnIds?.[0] ||
+              (abilityCue.effectType === "discard"
+                ? "discard"
+                : abilityCue.targetId),
+            type: "ability",
+            phase: "impact",
+          }
+        : combatCue;
+  const showingAbility = abilityCue && !abilityCue.defensive;
   const selectionHint =
     selection?.type === "unit"
       ? "选择敌方随从或首领，发动攻击"
@@ -843,9 +995,25 @@ export default function App() {
           <i className="corner tr" />
         </div>
         <div
-          className={"hero-vitals " + combatClass(combatCue, "hero")}
+          className={
+            "hero-vitals " +
+            combatClass(combatCue, "hero") +
+            " " +
+            abilityClass(abilityCue, "hero")
+          }
           data-combat-id="hero"
         >
+          {abilityCue?.targetId === "hero" && !abilityCue.defensive && (
+            <span className="ability-result-label">
+              {abilityCue.effectType === "heal"
+                ? `治疗 +${abilityCue.value}`
+                : abilityCue.effectType === "armor"
+                  ? `护甲 +${abilityCue.value}`
+                  : abilityCue.effectType === "fatigue"
+                    ? `疲劳 -${abilityCue.value}`
+                    : abilityCue.ability}
+            </span>
+          )}
           {combatCue?.targetId === "hero" && (
             <span className="combat-hero-label">
               {combatCue.type === "attack" ? "攻击目标 · 你" : "契约目标 · 你"}
@@ -977,6 +1145,7 @@ export default function App() {
               effects={s.effects}
               combatCue={combatCue}
               combatGeometry={combatGeometry}
+              abilityCue={abilityCue}
             />
           ))}
           {s.enemies.length === 0 && (
@@ -1001,6 +1170,7 @@ export default function App() {
               effects={s.effects}
               combatCue={combatCue}
               combatGeometry={combatGeometry}
+              abilityCue={abilityCue}
               loanDue={
                 u.loanContractId
                   ? s.contracts.find((c) => c.uid === u.loanContractId)?.due -
@@ -1031,10 +1201,34 @@ export default function App() {
               ? "active"
               : collectionWarning
                 ? "has-collection-warning"
-                : "")
+                : "") +
+            (abilityCue ? " has-ability-feedback" : "")
           }
         >
-          {busy ? (
+          {abilityCue ? (
+            <span
+              className={
+                "combat-caption ability-caption " +
+                (["fatigue", "discard"].includes(abilityCue.effectType)
+                  ? "ability-warning"
+                  : "")
+              }
+              role="status"
+              data-ability-action={abilityCue.ability}
+              key={abilityCue.id}
+            >
+              <Art
+                index={abilityCue.sourceArt}
+                className="ability-portrait"
+                label={abilityCue.sourceName}
+              />
+              <span>
+                {abilityCue.defensive
+                  ? `${actionCaption(combatCue)} · ${abilityCue.ability}：${abilityCue.label}`
+                  : abilityCaption(abilityCue)}
+              </span>
+            </span>
+          ) : busy ? (
             <span
               className="combat-caption"
               role="status"
@@ -1080,7 +1274,13 @@ export default function App() {
             回合 <strong>{String(s.turn).padStart(2, "0")}</strong>
           </span>
           <i />
-          <h2>{busy ? "敌方回合" : "你的回合"}</h2>
+          <h2>
+            {busy
+              ? showingAbility || playbackSide === "player"
+                ? "效果结算"
+                : "敌方回合"
+              : "你的回合"}
+          </h2>
           <em className={"rage-warning " + (planned.rage ? "active" : "")}>
             {planned.rage
               ? `狂怒侵蚀 +${planned.rage}`
@@ -1111,7 +1311,13 @@ export default function App() {
             onClick={finishTurn}
             disabled={busy || s.phase !== "battle"}
           >
-            <span>{busy ? "敌方行动中" : "结束回合"}</span>
+            <span>
+              {busy
+                ? showingAbility || playbackSide === "player"
+                  ? "效果结算中"
+                  : "敌方行动中"
+                : "结束回合"}
+            </span>
             <ChevronRight size={19} />
           </button>
           <small className="turn-note">剩余手牌保留 · 下回合抽 2 张</small>
@@ -1131,14 +1337,22 @@ export default function App() {
           <strong>抽牌堆</strong>
           <b>{s.draw.length}</b>
         </button>
-        <div className={`hand hand-${s.hand.length}`}>
+        <div
+          className={`hand hand-${s.hand.length} ${abilityClass(abilityCue, "hand")}`}
+          data-combat-id="hand"
+        >
           {s.hand.map((c, i) => (
             <Card
               key={c.uid}
               card={c}
               onClick={() => chooseCard(c)}
               selected={selection?.uid === c.uid}
-              disabled={cardInfo(c).cost > s.energy || busy}
+              disabled={
+                cardInfo(c).cost > s.energy ||
+                (busy && playbackSide === "enemy" && !showingAbility)
+              }
+              locked={busy}
+              revealed={abilityCue?.drawnIds?.includes(c.uid)}
               index={(i - (s.hand.length - 1) / 2) * 2.1}
             />
           ))}
@@ -1152,6 +1366,7 @@ export default function App() {
         </div>
         <button
           className="pile discard-pile"
+          data-combat-id="discard"
           onClick={() => setModal("discard")}
           aria-label={`查看弃牌堆，${s.discard.length} 张`}
         >
@@ -1180,7 +1395,7 @@ export default function App() {
           {storageWarning ? "存档不可用" : "进度自动保存"}
         </span>
       </footer>
-      <CombatPlayback cue={combatCue} onGeometry={setCombatGeometry} />
+      <CombatPlayback cue={activeLink} onGeometry={setCombatGeometry} />
       {notice && (
         <div className="toast" role="status">
           <Flame size={16} />

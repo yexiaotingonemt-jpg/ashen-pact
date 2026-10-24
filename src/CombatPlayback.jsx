@@ -13,6 +13,21 @@ export function combatClass(cue, uid) {
   return names.join(" ");
 }
 
+export function abilityClass(cue, uid) {
+  if (!cue) return "";
+  return [
+    cue.sourceId === uid && "ability-source",
+    cue.targetId === uid &&
+      `ability-target ${cue.effectType === "fatigue" ? "ability-negative" : ""}`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+export function abilityCaption(cue) {
+  return `${cue.sourceName} · ${cue.ability}：${cue.label}`;
+}
+
 export function impactView(frame) {
   const view = { ...frame.after, effects: frame.effects };
   // Hold the struck unit in its slot for the impact beat, including lethal hits.
@@ -37,11 +52,11 @@ export function impactView(frame) {
 }
 
 export function actionCaption(cue) {
-  if (!cue) return "敌方正在行动";
+  if (!cue) return "正在结算";
   if (cue.type === "attack")
-    return `${cue.sourceName} → ${cue.targetId === "hero" ? "你（英雄）" : `你的${cue.targetName}`}`;
+    return `${cue.sourceName} → ${cue.side === "player" ? (cue.targetId === "boss" ? `首领${cue.targetName}` : cue.targetName) : cue.targetId === "hero" ? "你（英雄）" : `你的${cue.targetName}`}`;
   if (cue.type === "summon")
-    return `${cue.contractKind === "betrayal" ? "契约倒戈" : "敌方召唤"} · ${cue.targetName}`;
+    return `${cue.side === "player" ? "我方召唤" : cue.contractKind === "betrayal" ? "契约倒戈" : "敌方召唤"} · ${cue.targetName}`;
   return cue.label || `${cue.sourceName} · ${cue.targetName || "契约兑现"}`;
 }
 
@@ -57,7 +72,13 @@ export default function CombatPlayback({ cue, onGeometry }) {
       const nodes = [...document.querySelectorAll(".game [data-combat-id]")];
       const source = nodes.find((e) => e.dataset.combatId === cue.sourceId);
       const target = nodes.find((e) => e.dataset.combatId === cue.targetId);
-      if (!source || !target || source === target) {
+      if (
+        !source ||
+        !target ||
+        source === target ||
+        !source.getClientRects().length ||
+        !target.getClientRects().length
+      ) {
         setLine(null);
         onGeometry(null);
         return;
@@ -67,12 +88,28 @@ export default function CombatPlayback({ cue, onGeometry }) {
       const x1 = a.x + a.width / 2,
         y1 = a.y + a.height / 2;
       const x2 = b.x + b.width / 2,
-        y2 = b.y + b.height / 2;
+        y2 =
+          b.y +
+          b.height *
+            (target.classList.contains("unit-card") ||
+            target.classList.contains("play-card")
+              ? 0.2
+              : 0.5);
       const distance = Math.hypot(x2 - x1, y2 - y1) || 1;
       setLine({ x1, y1, x2, y2 });
       onGeometry({
         x: ((x2 - x1) / distance) * 24,
         y: ((y2 - y1) / distance) * 24,
+      });
+    }
+    if (cue.type === "ability") {
+      const incoming = [
+        ...document.querySelectorAll(".game .hand [data-combat-id]"),
+      ].find((e) => e.dataset.combatId === cue.targetId);
+      incoming?.scrollIntoView({
+        behavior: "instant",
+        block: "nearest",
+        inline: "nearest",
       });
     }
     measure();
@@ -83,9 +120,12 @@ export default function CombatPlayback({ cue, onGeometry }) {
       window.removeEventListener("scroll", measure, true);
     };
   }, [cue?.id, cue?.phase, onGeometry]);
-  if (!cue || !line || cue.type !== "attack") return null;
+  if (!cue || !line || !["attack", "ability"].includes(cue.type)) return null;
   return (
-    <svg className={`combat-arrow combat-${cue.phase}`} aria-hidden="true">
+    <svg
+      className={`combat-arrow combat-${cue.phase} ${cue.type === "ability" ? "ability-link" : ""}`}
+      aria-hidden="true"
+    >
       <defs>
         <marker
           id="combat-arrow-tip"
@@ -95,7 +135,10 @@ export default function CombatPlayback({ cue, onGeometry }) {
           refY="3"
           orient="auto"
         >
-          <path d="M0,0 L6,3 L0,6 Z" fill="#ffe2b0" />
+          <path
+            d="M0,0 L6,3 L0,6 Z"
+            fill={cue.type === "ability" ? "#a8edcf" : "#ffe2b0"}
+          />
         </marker>
       </defs>
       <line {...line} markerEnd="url(#combat-arrow-tip)" />
