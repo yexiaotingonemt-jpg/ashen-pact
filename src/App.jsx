@@ -44,9 +44,21 @@ import {
   FilePenLine,
 } from "lucide-react";
 import { CARDS, cardInfo, ENCOUNTERS, RELICS, DIFFICULTIES } from "./data.js";
-import { act, newRun, intent, validTargets, validateSave } from "./engine.js";
+import {
+  act,
+  newRun,
+  intent,
+  validTargets,
+  validateSave,
+  enemyTurnPlayback,
+} from "./engine.js";
 import { sound } from "./audio.js";
 import Timeline from "./Timeline.jsx";
+import CombatPlayback, {
+  combatClass,
+  impactView,
+  actionCaption,
+} from "./CombatPlayback.jsx";
 import {
   contractLabel,
   contractText,
@@ -203,18 +215,40 @@ function Unit({
   valid,
   effects,
   loanDue,
+  combatCue,
+  combatGeometry,
 }) {
   return (
     <button
-      className={`unit-card ${enemy ? "enemy" : "friendly"} ${unit.ready && !enemy ? "ready" : ""} ${selected ? "selected" : ""} ${valid ? "targetable" : ""} ${unit.ward ? "warded" : ""} ${effects.some((e) => e.type === "attack" && e.target === unit.uid) ? "just-attacked" : ""}`}
+      className={`unit-card ${enemy ? "enemy" : "friendly"} ${unit.ready && !enemy ? "ready" : ""} ${selected ? "selected" : ""} ${valid ? "targetable" : ""} ${unit.ward ? "warded" : ""} ${effects.some((e) => e.type === "attack" && e.target === unit.uid) ? "just-attacked" : ""} ${combatClass(combatCue, unit.uid)} ${unit.fallen ? "combat-fallen" : ""}`}
+      style={
+        combatCue?.sourceId === unit.uid && combatGeometry
+          ? {
+              "--strike-x": `${combatGeometry.x}px`,
+              "--strike-y": `${combatGeometry.y}px`,
+            }
+          : undefined
+      }
       onClick={onClick}
       data-unit-key={unit.key}
       data-target-id={unit.uid}
+      data-combat-id={unit.uid}
       title={`${unit.name}：${CARDS[unit.key]?.text || unit.tags.join(" · ") || "暗影中的敌人。"}${unit.burn ? ` 灼烧 ${unit.burn} 层。` : ""}`}
       aria-label={`${unit.name}，${unit.atk} 攻击，${unit.hp} 生命${unit.ready && !enemy ? "，可以攻击" : ""}`}
     >
       <Art index={unit.art} />
       <span className="unit-shadow" />
+      {combatCue?.targetId === unit.uid && (
+        <span className="combat-unit-label">
+          {combatCue.type === "summon"
+            ? "召唤入场"
+            : combatCue.type === "attack"
+              ? "攻击目标"
+              : combatCue.type === "burn"
+                ? "灼烧"
+                : "契约兑现"}
+        </span>
+      )}
       <span className="unit-name">{unit.name}</span>
       <div className="unit-tags">
         {loanDue != null && (
@@ -362,7 +396,10 @@ function Modal({
 }
 
 export default function App() {
-  const [s, setS] = useState(load),
+  const [savedState, setS] = useState(load),
+    [playbackState, setPlaybackState] = useState(null),
+    [combatCue, setCombatCue] = useState(null),
+    [combatGeometry, setCombatGeometry] = useState(null),
     [prefs, setPrefs] = useState(settings),
     [selection, setSelection] = useState(null),
     [modal, setModal] = useState(() => {
@@ -376,14 +413,17 @@ export default function App() {
     [notice, setNotice] = useState(""),
     [announcement, setAnnouncement] = useState(""),
     [campChoice, setCampChoice] = useState(null),
-    [difficulty, setDifficulty] = useState(s.difficulty),
+    [difficulty, setDifficulty] = useState(savedState.difficulty),
     [full, setFull] = useState(false);
+  const s = playbackState || savedState;
   const [inspectedContract, setInspectedContract] = useState(null);
   const timer = useRef(null),
     announceTimer = useRef(null),
     noticeTimer = useRef(null),
-    stateRef = useRef(s);
-  stateRef.current = s;
+    stateRef = useRef(savedState),
+    playbackToken = useRef(0),
+    busyRef = useRef(false);
+  stateRef.current = savedState;
   const planned = intent(s),
     targets = validTargets(s, selection),
     selectedCard =
@@ -396,29 +436,36 @@ export default function App() {
     try {
       localStorage.setItem(
         SAVE_KEY,
-        JSON.stringify({ ...s, effects: [], notice: "", announcement: "" }),
+        JSON.stringify({
+          ...savedState,
+          effects: [],
+          notice: "",
+          announcement: "",
+        }),
       );
       setStorageWarning(false);
     } catch {
       setStorageWarning(true);
     }
-  }, [s]);
+  }, [savedState]);
   useEffect(() => {
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(prefs));
     } catch {}
   }, [prefs]);
   useEffect(() => {
+    if (busy) return;
     if (s.notice) toast(s.notice);
     if (s.announcement) {
       setAnnouncement(s.announcement);
       clearTimeout(announceTimer.current);
       announceTimer.current = setTimeout(() => setAnnouncement(""), 1450);
     }
-  }, [s.revision]);
+  }, [s.revision, busy]);
   useEffect(
     () => () => {
       clearTimeout(timer.current);
+      playbackToken.current++;
       clearTimeout(announceTimer.current);
       clearTimeout(noticeTimer.current);
     },
@@ -592,27 +639,83 @@ export default function App() {
     else toast("先从手牌中选择一名随从，再点击空位召唤。");
   }
   function finishTurn() {
-    if (busy || modal || stateRef.current.phase !== "battle") return;
+    if (busyRef.current || modal || stateRef.current.phase !== "battle") return;
+    const original = stateRef.current;
+    const { state: result, frames } = enemyTurnPlayback(original);
+    if (result.notice) {
+      setS(result);
+      return;
+    }
+    const playedEffects = new Set(
+      frames.flatMap((f) => f.effects.map((e) => e.id)),
+    );
+    const next = {
+      ...result,
+      effects: result.effects.filter((e) => !playedEffects.has(e.id)),
+    };
+    const token = ++playbackToken.current;
+    busyRef.current = true;
+    // Persist the completed turn once; visual snapshots never become save data.
+    stateRef.current = next;
+    setS(next);
+    setPlaybackState({ ...original, effects: [], announcement: "" });
     setSelection(null);
     setBusy(true);
-    setAnnouncement("敌方回合");
+    setAnnouncement("");
+    clearTimeout(announceTimer.current);
     sound("turn", prefs.audio);
-    timer.current = setTimeout(() => {
-      const next = act(stateRef.current, { type: "endTurn" });
-      setS(next);
-      setBusy(false);
-      sound(
-        next.phase === "lost"
-          ? "hit"
-          : next.phase === "reward" || next.phase === "won"
-            ? "win"
-            : "turn",
-        prefs.audio,
-      );
-    }, 750);
+    function showFrame(index) {
+      if (token !== playbackToken.current) return;
+      const frame = frames[index];
+      if (!frame) {
+        setPlaybackState(null);
+        setCombatCue(null);
+        busyRef.current = false;
+        setBusy(false);
+        sound(
+          next.phase === "lost"
+            ? "hit"
+            : ["reward", "won"].includes(next.phase)
+              ? "win"
+              : "turn",
+          prefs.audio,
+        );
+        return;
+      }
+      const cue = { ...frame.cue, id: `${token}-${index}`, phase: "windup" };
+      const lead = cue.type === "attack" ? 180 : 100;
+      const hold =
+        cue.type === "summon" ? 560 : cue.type === "attack" ? 320 : 280;
+      setPlaybackState({
+        ...frame.before,
+        effects: [],
+        announcement: "",
+        phase: "battle",
+      });
+      setCombatCue(cue);
+      timer.current = setTimeout(() => {
+        if (token !== playbackToken.current) return;
+        setPlaybackState({
+          ...impactView(frame),
+          announcement: "",
+          phase: "battle",
+        });
+        setCombatCue({ ...cue, phase: "impact" });
+        sound(
+          frame.effects.some((e) => e.type === "hit") ? "hit" : "card",
+          prefs.audio,
+        );
+        timer.current = setTimeout(() => showFrame(index + 1), hold);
+      }, lead);
+    }
+    timer.current = setTimeout(() => showFrame(0), 150);
   }
   function restart() {
     clearTimeout(timer.current);
+    playbackToken.current++;
+    busyRef.current = false;
+    setPlaybackState(null);
+    setCombatCue(null);
     setBusy(false);
     setS(newRun(Date.now(), difficulty));
     setSelection(null);
@@ -739,7 +842,15 @@ export default function App() {
           <i className="corner tl" />
           <i className="corner tr" />
         </div>
-        <div className="hero-vitals">
+        <div
+          className={"hero-vitals " + combatClass(combatCue, "hero")}
+          data-combat-id="hero"
+        >
+          {combatCue?.targetId === "hero" && (
+            <span className="combat-hero-label">
+              {combatCue.type === "attack" ? "攻击目标 · 你" : "契约目标 · 你"}
+            </span>
+          )}
           <Health hp={s.hero.hp} maxHp={s.hero.maxHp} />
           <div className="hero-armor">
             <Shield size={17} />
@@ -807,7 +918,8 @@ export default function App() {
       <section className="battlefield" aria-label="战场">
         <div className="enemy-header">
           <button
-            className={`boss-name ornamental ${targets.includes("boss") ? "targetable" : ""}`}
+            className={`boss-name ornamental ${targets.includes("boss") ? "targetable" : ""} ${combatClass(combatCue, "boss")}`}
+            data-combat-id="boss"
             onClick={() => targetEnemy("boss")}
             aria-label={`攻击首领 ${s.boss.name}，${s.boss.hp} 生命`}
           >
@@ -863,6 +975,8 @@ export default function App() {
               onClick={() => targetEnemy(u.uid)}
               valid={targets.includes(u.uid)}
               effects={s.effects}
+              combatCue={combatCue}
+              combatGeometry={combatGeometry}
             />
           ))}
           {s.enemies.length === 0 && (
@@ -885,6 +999,8 @@ export default function App() {
               selected={selection?.uid === u.uid}
               valid={targets.includes(u.uid)}
               effects={s.effects}
+              combatCue={combatCue}
+              combatGeometry={combatGeometry}
               loanDue={
                 u.loanContractId
                   ? s.contracts.find((c) => c.uid === u.loanContractId)?.due -
@@ -918,7 +1034,15 @@ export default function App() {
                 : "")
           }
         >
-          {selection ? (
+          {busy ? (
+            <span
+              className="combat-caption"
+              role="status"
+              data-combat-action={combatCue?.type || "start"}
+            >
+              <Swords size={13} /> {actionCaption(combatCue)}
+            </span>
+          ) : selection ? (
             <>
               <Hand size={15} />
               {selectionHint}
@@ -1056,6 +1180,7 @@ export default function App() {
           {storageWarning ? "存档不可用" : "进度自动保存"}
         </span>
       </footer>
+      <CombatPlayback cue={combatCue} onGeometry={setCombatGeometry} />
       {notice && (
         <div className="toast" role="status">
           <Flame size={16} />

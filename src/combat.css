@@ -1,0 +1,170 @@
+.resolving .enemy-row .unit-card {
+  animation: none;
+}
+.combat-arrow {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  z-index: 35;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 3px #160705);
+}
+.combat-arrow line {
+  stroke: #ffc58c;
+  stroke-width: 3;
+  stroke-dasharray: 7 5;
+  opacity: 0.9;
+}
+.combat-arrow circle {
+  fill: #e8543222;
+  stroke: #ffe2b0;
+  stroke-width: 2;
+}
+.combat-arrow.combat-impact line {
+  stroke: #ff8f66;
+  stroke-width: 4;
+}
+.game .unit-card.combat-attacker.combat-windup {
+  animation: enemyWindup 180ms ease-in both;
+  z-index: 8;
+  border-color: #ffe0a0;
+  filter: brightness(1.2) drop-shadow(0 0 8px #e9884f);
+}
+.game .unit-card.combat-attacker.combat-impact {
+  animation: enemyRecoil 160ms ease-out both;
+  z-index: 8;
+}
+.game .combat-target {
+  outline: 2px solid #ffbf8d;
+  outline-offset: 3px;
+  box-shadow:
+    0 0 20px #ff734e99,
+    inset 0 0 14px #f7734b55;
+}
+.game .unit-card.combat-target {
+  border-color: #ffc69e;
+  filter: brightness(1.2);
+}
+.game .combat-target.combat-impact {
+  animation: enemyImpact 230ms ease-out;
+}
+.combat-hero-label,
+.combat-unit-label {
+  position: absolute;
+  z-index: 12;
+  padding: 3px 5px;
+  border: 1px solid #edaa79;
+  background: #39140fee;
+  color: #ffe5bd;
+  font:
+    10px/1.3 "Microsoft YaHei",
+    sans-serif;
+  letter-spacing: 0;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.combat-hero-label {
+  bottom: 100%;
+  left: 0;
+}
+.combat-unit-label {
+  top: 37%;
+  left: 3px;
+  right: 3px;
+  padding: 3px 1px;
+  font-size: 9px;
+}
+.combat-arriving .combat-unit-label {
+  border-color: #d6d6a0;
+  background: #17382cef;
+  color: #e9f2cb;
+}
+.game .unit-card.combat-arriving.combat-impact {
+  animation: enemyArrival 220ms ease-out both;
+  border-color: #e3d09b;
+  box-shadow: 0 0 20px #92c8a8aa;
+}
+.combat-fallen {
+  filter: saturate(0.3) brightness(0.65);
+}
+.future-mode .selection-hint > .combat-caption {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 7px;
+  border-radius: 3px;
+  background: #251713ed;
+  border: 1px solid #ba8b5b77;
+  color: #ffe2b9;
+  opacity: 1;
+  font-size: 11px;
+  letter-spacing: 0;
+  line-height: 1.3;
+}
+@keyframes enemyWindup {
+  from {
+    translate: 0 0;
+  }
+  to {
+    translate: var(--strike-x, 0px) var(--strike-y, 20px);
+  }
+}
+@keyframes enemyRecoil {
+  from {
+    translate: var(--strike-x, 0px) var(--strike-y, 20px);
+  }
+  to {
+    translate: 0 0;
+  }
+}
+@keyframes enemyImpact {
+  0%,
+  60% {
+    background-color: #8e3729;
+  }
+  30% {
+    filter: brightness(1.65);
+  }
+}
+@keyframes enemyArrival {
+  from {
+    opacity: 0.25;
+    translate: 0 -15px;
+    scale: 0.85;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
+}
+@media (max-width: 700px) {
+  .future-mode .selection-hint > .combat-caption {
+    font-size: 9px;
+    padding: 3px 5px;
+  }
+  .combat-unit-label {
+    font-size: 7px;
+  }
+  .combat-hero-label {
+    font-size: 8px;
+    padding: 2px 4px;
+  }
+  .combat-arrow line {
+    stroke-width: 2;
+  }
+  .combat-arrow circle {
+    r: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .game .unit-card.combat-attacker,
+  .game .unit-card.combat-arriving,
+  .game .combat-target {
+    animation: none !important;
+  }
+}

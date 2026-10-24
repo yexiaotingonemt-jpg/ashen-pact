@@ -203,15 +203,58 @@ function queueOmens(s) {
   }
 }
 
-function resolveDue(s) {
+function recordFrame(s, record, before, cue) {
+  if (!record) return;
+  record({
+    before,
+    after: clone(s),
+    cue: clone(cue),
+    effects: clone(s.effects.slice(before.effects.length)),
+  });
+}
+
+function contractCue(before, after, c) {
+  const arrival = after.enemies.find(
+    (unit) => !before.enemies.some((old) => old.uid === unit.uid),
+  );
+  const targetsBoss =
+    (c.kind === "blood" && c.owner === "enemy") ||
+    c.kind === "betrayal" ||
+    (c.kind === "omen" &&
+      (["ward", "howl", "summon"].includes(c.effect) ||
+        (c.effect === "writ" &&
+          !before.contracts.some((debt) => debt.owner === "player"))));
+  const target = arrival || (targetsBoss ? before.boss : before.hero);
+  return {
+    type: arrival ? "summon" : "contract",
+    sourceId:
+      c.unitId || (c.owner === "enemy" && c.kind === "blood" ? "hero" : "boss"),
+    sourceName: c.source,
+    targetId: target.uid,
+    targetName: target.name || "你",
+    label: arrival
+      ? `${arrival.name}${c.kind === "betrayal" ? "倒戈" : "加入敌方战场"}`
+      : c.label || `${c.source} · 契约清算`,
+    contractId: c.uid,
+    contractKind: c.kind,
+    effect: c.effect || c.kind,
+    value: c.kind === "omen" ? c.value : c.amount,
+    description: contractText(c),
+  };
+}
+
+function resolveDue(s, record) {
   const context = { drawBudget: 2 };
   for (let safety = 0; safety < 60; safety++) {
     const c = s.contracts
       .filter((c) => c.due <= s.turn)
       .sort((a, b) => a.due - b.due || a.order - b.order)[0];
     if (!c) return context;
+    const before = record ? clone(s) : null;
     settleContract(s, c, context);
-    if (check(s)) return context;
+    const ended = check(s);
+    if (record) recordFrame(s, record, before, contractCue(before, s, c));
+    if (ended) return context;
   }
   throw new Error("契约结算超出安全上限。");
 }
@@ -684,11 +727,30 @@ function burnTick(s, t) {
     t.burn--;
   }
 }
-function endTurn(s) {
+function endTurn(s, record) {
   s.announcement = "新的回合";
   // Damage-over-time resolves before attacks; a dying enemy never gets to attack.
-  for (const u of [s.boss, ...s.enemies]) burnTick(s, u);
-  if (check(s)) return;
+  const burning = [s.boss, ...s.enemies].filter((u) => u.burn > 0);
+  let ended = false;
+  for (let index = 0; index < burning.length; index++) {
+    const u = burning[index];
+    const before = record ? clone(s) : null;
+    const amount = u.burn;
+    burnTick(s, u);
+    // Preserve the existing batch cleanup and victory check after ALL burn ticks.
+    if (index === burning.length - 1) ended = check(s);
+    recordFrame(s, record, before, {
+      type: "burn",
+      sourceId: u.uid,
+      sourceName: u.name,
+      targetId: u.uid,
+      targetName: u.name,
+      label: `${u.name}受到灼烧`,
+      value: amount,
+    });
+  }
+  if (!burning.length) ended = check(s);
+  if (ended) return;
   log(s, `—— 敌方回合 ${s.turn} ——`);
   for (const u of [...s.enemies]) {
     const guards = s.allies.filter((x) => x.tags.includes("守卫"));
@@ -698,6 +760,7 @@ function endTurn(s) {
       .filter((t) => t.hp <= u.atk)
       .sort((a, b) => b.atk - a.atk)[0];
     const target = guards[0] || killable || s.hero;
+    const before = record ? clone(s) : null;
     const dealt = damage(s, target, u.atk);
     if (target.uid !== "hero") damage(s, u, target.atk);
     if (u.tags.includes("汲取") && dealt) heal(s, s.boss, 2);
@@ -706,12 +769,23 @@ function endTurn(s) {
       `${u.name}攻击${target.name || "你"}，造成 ${dealt} 点伤害。`,
       "bad",
     );
-    if (check(s)) return;
+    const ended = check(s);
+    recordFrame(s, record, before, {
+      type: "attack",
+      sourceId: u.uid,
+      sourceName: u.name,
+      targetId: target.uid,
+      targetName: target.name || "你",
+      label: `${u.name}攻击${target.name || "你"}`,
+      value: u.atk,
+      damage: dealt,
+    });
+    if (ended) return;
   }
   s.turn++;
   s.maxEnergy = Math.min(8, s.maxEnergy + 1);
   s.energy = s.maxEnergy;
-  const settlement = resolveDue(s);
+  const settlement = resolveDue(s, record);
   if (s.phase !== "battle") return;
   s.skillUsed = false;
   s.firstSpell = false;
@@ -733,7 +807,7 @@ function postReward(s) {
     s.relicOffer = shuffled(s, available).slice(0, 3);
   } else s.phase = "camp";
 }
-export function act(original, a) {
+function transition(original, a, record) {
   const s = clone(original);
   s.effects = [];
   s.notice = "";
@@ -745,7 +819,7 @@ export function act(original, a) {
     if (a.type === "play") play(s, a);
     else if (a.type === "attack") attack(s, a);
     else if (a.type === "skill") skill(s, a);
-    else if (a.type === "endTurn") endTurn(s);
+    else if (a.type === "endTurn") endTurn(s, record);
     else if (a.type === "reward") {
       requireThat(s.phase === "reward", "当前无法领取战利品。");
       if (a.key === "heal") {
@@ -794,6 +868,20 @@ export function act(original, a) {
       effects: [],
     };
   }
+}
+
+export function act(original, a) {
+  return transition(original, a);
+}
+
+// Presentation metadata stays outside saved state. The final state uses the
+// same transition as act(); callers must persist it, never the playback frames.
+export function enemyTurnPlayback(original) {
+  const frames = [];
+  const state = transition(original, { type: "endTurn" }, (frame) =>
+    frames.push(frame),
+  );
+  return { state, frames: state.notice ? [] : frames };
 }
 
 export function validateSave(s) {
