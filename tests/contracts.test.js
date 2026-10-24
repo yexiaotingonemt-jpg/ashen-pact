@@ -45,6 +45,9 @@ test("three-turn enemy promises are deterministic, real and visible", () => {
 });
 test("zero-cost power signs an immutable two-turn blood debt", () => {
   const initial = quiet();
+  initial.hand = [
+    { uid: "existing-flame", key: "borrowedFlame", upgraded: false },
+  ];
   const s = play(initial, "borrowedFlame", "boss");
   assert.equal(initial.contracts.length, 3);
   assert.equal(s.boss.hp, 94);
@@ -52,7 +55,7 @@ test("zero-cost power signs an immutable two-turn blood debt", () => {
   assert.equal(debt(s).amount, 6);
   assert.equal(s.stats.signed, 1);
   assert.equal(
-    s.hand.some((c) => c.key === "borrowedFlame"),
+    s.hand.some((c) => c.uid === "existing-flame" && c.key === "borrowedFlame"),
     true,
   );
 });

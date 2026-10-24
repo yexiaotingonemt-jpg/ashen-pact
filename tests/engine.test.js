@@ -8,7 +8,8 @@ import {
   intent,
   rage,
 } from "../src/engine.js";
-import { cardInfo, STARTER } from "../src/data.js";
+import { ARCHETYPES, cardInfo, STARTER } from "../src/data.js";
+const initialDeckSize = STARTER.length + ARCHETYPES.contract.keys.length;
 const card = (s, key, upgraded = false) => ({
   key,
   uid: "test-" + s.nextId++,
@@ -25,9 +26,11 @@ test("seeded opening, immutable transitions and save roundtrip", () => {
     b = newRun(123);
   assert.deepEqual(a, b);
   assert.equal(a.hand.length, 5);
-  assert.equal(a.draw.length, STARTER.length - 5);
+  assert.equal(a.draw.length, initialDeckSize - 5);
   assert.ok(validateSave(JSON.parse(JSON.stringify(a))));
-  const next = act(a, { type: "play", uid: a.hand[0].uid });
+  const borrowed = card(a, "borrowedKnight");
+  a.hand.push(borrowed);
+  const next = act(a, { type: "play", uid: borrowed.uid });
   assert.equal(a.allies.length, 0);
   assert.equal(next.allies.length, 1);
   assert.equal(next.energy, 3);
@@ -81,8 +84,9 @@ test("ward negates exactly one incoming hit", () => {
   assert.equal(s.allies[0].hp, 9);
 });
 test("failed targeted spell does not consume a card or energy", () => {
-  let s = newRun(1),
-    uid = s.hand[1].uid;
+  const s = newRun(1);
+  s.hand = [card(s, "bolt")];
+  const uid = s.hand[0].uid;
   const next = act(s, { type: "play", uid, target: "missing" });
   assert.ok(next.notice);
   assert.equal(next.energy, s.energy);
@@ -191,8 +195,12 @@ test("victory-reward-relic-camp-next battle is complete and persistent", () => {
   assert.equal(s.phase, "reward");
   assert.equal(s.hero.hp, 28);
   s = act(s, { type: "reward", key: s.rewardOffer[0] });
+  assert.equal(s.phase, "reward");
+  assert.equal(s.rewardRound, 2);
+  assert.equal(s.deck.length, initialDeckSize + 1);
+  s = act(s, { type: "reward", key: s.rewardOffer[0] });
   assert.equal(s.phase, "relic");
-  assert.equal(s.deck.length, STARTER.length + 1);
+  assert.equal(s.deck.length, initialDeckSize + 2);
   s = act(s, { type: "relic", key: s.relicOffer[0] });
   assert.equal(s.phase, "camp");
   const uid = s.deck[0].uid;
@@ -208,8 +216,15 @@ test("skip reward heals and camp rest clamps maximum health", () => {
   let s = newRun(2);
   s.boss.hp = 1;
   s = play(s, "bolt", "boss");
+  s.hero.hp = 22;
   s = act(s, { type: "reward", key: "heal" });
-  assert.equal(s.deck.length, STARTER.length);
+  assert.equal(s.hero.hp, 26);
+  assert.equal(s.phase, "reward");
+  assert.equal(s.deck.length, initialDeckSize);
+  s = act(s, { type: "reward", key: "heal" });
+  assert.equal(s.hero.hp, 30);
+  assert.equal(s.phase, "relic");
+  assert.equal(s.deck.length, initialDeckSize);
   s = act(s, { type: "relic", key: s.relicOffer[0] });
   s = act(s, { type: "camp", choice: "rest" });
   assert.equal(s.hero.hp, 40);
@@ -234,7 +249,9 @@ test("invalid reward and duplicate relic cannot alter progression", () => {
   s = play(s, "bolt", "boss");
   let next = act(s, { type: "reward", key: "fake" });
   assert.equal(next.phase, "reward");
-  assert.equal(next.deck.length, STARTER.length);
+  assert.equal(next.deck.length, initialDeckSize);
+  s = act(s, { type: "reward", key: s.rewardOffer[0] });
+  assert.equal(s.phase, "reward");
   s = act(s, { type: "reward", key: s.rewardOffer[0] });
   next = act(s, { type: "relic", key: "ember" });
   assert.equal(next.phase, "relic");
@@ -292,7 +309,7 @@ test("camp removal persists and minimum deck size is enforced", () => {
   const removed = s.deck[0].uid;
   s = act(s, { type: "camp", choice: "remove", uid: removed });
   assert.equal(s.phase, "battle");
-  assert.equal(s.deck.length, STARTER.length - 1);
+  assert.equal(s.deck.length, initialDeckSize - 1);
   assert.equal(
     s.deck.some((c) => c.uid === removed),
     false,

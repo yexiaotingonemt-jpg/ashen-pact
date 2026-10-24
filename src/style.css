@@ -4745,3 +4745,208 @@ a {
     display: none;
   }
 }
+
+/* Starting routes and the persistent card reference share the battle's palette. */
+.setup-label {
+  margin: 21px 0 12px;
+  color: #dbc798;
+  font: 15px var(--serif);
+  letter-spacing: 2px;
+}
+.setup-label span {
+  margin-left: 10px;
+  color: #9ba99e;
+  font-size: 10px;
+  font-family: inherit;
+  letter-spacing: 0.4px;
+}
+.archetype-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 11px;
+}
+.archetype-choice {
+  --route-color: #d5be88;
+  padding: 16px;
+  border: 1px solid #9a8b594d;
+  background: #0b1512a6;
+  text-align: left;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+}
+.archetype-choice.burn {
+  --route-color: #e6a178;
+}
+.archetype-choice.armor {
+  --route-color: #9dbcc9;
+}
+.archetype-choice.healing {
+  --route-color: #9eccaa;
+}
+.archetype-choice.chosen {
+  border-color: var(--route-color);
+  background: #b29b571c;
+  box-shadow: inset 0 0 0 1px #b29b5726;
+}
+.archetype-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--route-color);
+}
+.archetype-heading h3 {
+  font: 19px var(--serif);
+  letter-spacing: 2px;
+}
+.archetype-heading > svg:last-child {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.archetype-choice p {
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.85;
+  color: #d0d6c8;
+}
+.archetype-choice small {
+  display: block;
+  margin-top: 8px;
+  font-size: 10px;
+  line-height: 1.8;
+  color: #93a397;
+}
+.new-run-modal .difficulty-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.new-run-modal .difficulty-options > button {
+  padding: 12px;
+  gap: 10px;
+}
+.new-run-modal .difficulty-options > button > span > svg {
+  width: 22px;
+  height: 22px;
+}
+.new-run-modal .difficulty-options h3 {
+  font-size: 17px;
+}
+.new-run-modal .difficulty-options p {
+  font-size: 10px;
+}
+.new-run-modal .difficulty-options > button > svg {
+  flex-shrink: 0;
+}
+.catalog-open {
+  margin: 0 auto 22px;
+  padding: 9px 15px;
+}
+.catalog-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.catalog-tabs {
+  display: flex;
+  gap: 6px;
+}
+.catalog-tabs button {
+  border: 1px solid #9a8b594d;
+  padding: 7px 15px;
+  color: #a9b4a7;
+  background: #0b151280;
+}
+.catalog-tabs button.chosen,
+.catalog-controls .chosen {
+  border-color: #c5a967;
+  color: #e7cf9d;
+  background: #b29b571c;
+}
+.catalog-controls > .secondary-button {
+  padding: 7px 12px;
+}
+.catalog-collection {
+  align-items: start;
+}
+@media (max-width: 650px) {
+  .new-run-modal .modal {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  .new-run-modal .modal h2 {
+    font-size: 23px;
+    letter-spacing: 2px;
+  }
+  .setup-label {
+    margin-top: 18px;
+    font-size: 14px;
+  }
+  .setup-label span {
+    display: block;
+    margin: 6px 0 0;
+    line-height: 1.7;
+  }
+  .archetype-options {
+    gap: 8px;
+  }
+  .archetype-choice {
+    padding: 12px 10px;
+  }
+  .archetype-heading {
+    gap: 5px;
+  }
+  .archetype-heading h3 {
+    font-size: 16px;
+    letter-spacing: 1px;
+  }
+  .archetype-heading > svg {
+    width: 17px;
+  }
+  .archetype-choice p {
+    font-size: 11px;
+    line-height: 1.75;
+  }
+  .archetype-choice small {
+    font-size: 9px;
+    line-height: 1.75;
+  }
+  .new-run-modal .difficulty-options {
+    gap: 7px;
+  }
+  .new-run-modal .difficulty-options > button {
+    position: relative;
+    padding: 11px 7px;
+    display: block;
+  }
+  .new-run-modal .difficulty-options > button > span {
+    display: none;
+  }
+  .new-run-modal .difficulty-options > button > svg {
+    position: absolute;
+    top: 12px;
+    right: 6px;
+    width: 12px;
+  }
+  .new-run-modal .difficulty-options h3 {
+    font-size: 16px;
+    letter-spacing: 1px;
+  }
+  .new-run-modal .difficulty-options p {
+    font-size: 9px;
+    line-height: 1.75;
+  }
+  .catalog-controls {
+    gap: 10px;
+  }
+  .catalog-tabs button {
+    padding: 7px 12px;
+    font-size: 11px;
+  }
+  .catalog-controls > .secondary-button {
+    font-size: 11px;
+  }
+}

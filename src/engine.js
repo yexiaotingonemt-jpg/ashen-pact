@@ -4,6 +4,7 @@ import {
   ENEMIES,
   ENCOUNTERS,
   STARTER,
+  ARCHETYPES,
   REWARD_POOL,
   RELICS,
   DIFFICULTIES,
@@ -65,10 +66,38 @@ function unitTrigger(
     ...details,
   });
 }
-function heal(s, target, n) {
+function heal(s, target, n, feedback) {
+  if (n <= 0 || target.hp <= 0) return 0;
   const got = Math.min(n, target.maxHp - target.hp);
   target.hp += got;
   if (got) fx(s, "heal", target.uid, got);
+  // A positive healing attempt is one event, including its overheal. No recursion:
+  // the payoff only deals damage and never calls heal again.
+  if (target.uid === "hero" && s.phase === "battle") {
+    for (const u of s.allies.filter(
+      (u) => u.hp > 0 && u.tags.includes("返照"),
+    )) {
+      if (u.healProcTurn !== s.turn) {
+        u.healProcTurn = s.turn;
+        u.healProcs = 0;
+      }
+      if (u.healProcs >= 2) continue;
+      u.healProcs++;
+      const dealt = damage(s, s.boss, 2);
+      s.stats.damage += dealt;
+      unitTrigger(
+        feedback,
+        u,
+        "返照",
+        "boss",
+        s.boss.name,
+        "damage",
+        dealt,
+        `治疗回响，造成 ${dealt} 伤害${got === 0 ? "（溢出治疗）" : ""}`,
+        { requested: n, healed: got, overheal: n - got },
+      );
+    }
+  }
   return got;
 }
 function draw(s, n) {
@@ -147,7 +176,8 @@ function unitDraw(s, units, ability, feedback) {
   });
 }
 function unitHeal(s, unit, ability, feedback) {
-  const value = heal(s, s.hero, 2);
+  const followup = feedback && { triggers: [] };
+  const value = heal(s, s.hero, 2, followup);
   unitTrigger(
     feedback,
     unit,
@@ -159,6 +189,7 @@ function unitHeal(s, unit, ability, feedback) {
     value ? `恢复 ${value} 生命` : "已满血，恢复 0 生命",
     { requested: 2, overheal: 2 - value },
   );
+  if (feedback) feedback.triggers.push(...followup.triggers);
 }
 function damage(s, target, n, feedback) {
   if (n <= 0) return 0;
@@ -185,9 +216,48 @@ function damage(s, target, n, feedback) {
   fx(s, "hit", target.uid, dealt || "格挡");
   return dealt;
 }
-function armor(s, n) {
+function armor(s, n, feedback) {
+  if (n <= 0) return;
   s.hero.shield += n;
   fx(s, "armor", "hero", n);
+  for (const u of s.allies.filter((u) => u.hp > 0 && u.tags.includes("锻甲"))) {
+    if (u.armorProcTurn === s.turn) continue;
+    u.armorProcTurn = s.turn;
+    u.atk += 2;
+    fx(s, "buff", u.uid, "+2 攻击");
+    unitTrigger(
+      feedback,
+      u,
+      "锻甲",
+      u.uid,
+      u.name,
+      "buff",
+      2,
+      "本回合首次获得护甲，攻击 +2",
+    );
+  }
+}
+
+function applyBurn(s, target, amount, feedback) {
+  if (amount <= 0 || target.hp <= 0) return;
+  target.burn += amount;
+  fx(s, "burn", target.uid, amount);
+  for (const u of s.allies.filter((u) => u.hp > 0 && u.tags.includes("引燃"))) {
+    if (u.burnProcTurn === s.turn) continue;
+    u.burnProcTurn = s.turn;
+    target.burn++;
+    fx(s, "burn", target.uid, 1);
+    unitTrigger(
+      feedback,
+      u,
+      "引燃",
+      target.uid,
+      target.name,
+      "burn",
+      1,
+      "本回合首次施加灼烧，追加 1 层",
+    );
+  }
 }
 
 function signContract(s, details) {
@@ -289,7 +359,7 @@ function settleContract(s, c, context = { drawBudget: 2 }, feedback) {
   }
   const witnesses = s.allies.filter((u) => u.tags.includes("见证"));
   if (witnesses.length) {
-    armor(s, witnesses.length);
+    armor(s, witnesses.length, feedback);
     for (const unit of witnesses)
       unitTrigger(
         feedback,
@@ -372,7 +442,7 @@ function resolveDue(s, record, feedback) {
     const before = record ? clone(s) : null;
     const triggerStart = feedback?.triggers.length || 0;
     settleContract(s, c, context, feedback);
-    const ended = check(s);
+    const ended = check(s, feedback);
     if (record)
       recordFrame(
         s,
@@ -387,7 +457,7 @@ function resolveDue(s, record, feedback) {
   throw new Error("契约结算超出安全上限。");
 }
 
-function manipulate(s, c, effect, feedback) {
+function manipulate(s, c, effect, feedback, foreclosureBonus = 2) {
   if (effect === "transfer") {
     c.amount = debtValue(c);
     c.kind = "blood";
@@ -422,7 +492,7 @@ function manipulate(s, c, effect, feedback) {
     s.stats.cancelled++;
     log(s, `「${c.source}」被焚毁，不再兑现。`, "good");
   } else if (effect === "foreclose") {
-    c.amount += 2;
+    c.amount += foreclosureBonus;
     settleContract(s, c, undefined, feedback);
   }
   s.stats.weaves++;
@@ -464,7 +534,7 @@ function makeUnit(s, c) {
     ready: d.tags.includes("突袭"),
   };
 }
-function clean(s) {
+function clean(s, feedback) {
   const deadIds = s.allies.filter((u) => u.hp <= 0).map((u) => u.uid);
   for (const c of s.contracts.filter(
     (c) => c.kind === "betrayal" && deadIds.includes(c.unitId),
@@ -483,7 +553,7 @@ function clean(s) {
     log(s, `${u.name} 化为灰烬。`, "good");
     s.stats.kills++;
     if (s.relics.includes("ember") && !s.emberUsed) {
-      heal(s, s.hero, 3);
+      heal(s, s.hero, 3, feedback);
       s.emberUsed = true;
       log(s, "不熄余烬：恢复 3 点生命。", "good");
     }
@@ -493,8 +563,8 @@ function clean(s) {
   s.enemies = s.enemies.filter((x) => x.hp > 0);
   s.allies = s.allies.filter((x) => x.hp > 0);
 }
-function check(s) {
-  clean(s);
+function check(s, feedback) {
+  clean(s, feedback);
   if (s.hero.hp <= 0) {
     s.phase = "lost";
     log(s, "火光熄灭了。下一次，你会走得更远。", "bad");
@@ -521,7 +591,9 @@ function check(s) {
       log(s, "永夜已尽。你守住了最后的火光。", "good");
     } else {
       s.phase = "reward";
-      s.rewardOffer = shuffled(s, REWARD_POOL).slice(0, 3);
+      s.rewardRound = 1;
+      s.rewardSeen = [];
+      s.rewardOffer = rewardOffer(s);
       const recovery = 6 + (s.relics.includes("chalice") ? 5 : 0);
       heal(s, s.hero, recovery);
       log(s, `战斗胜利。恢复 ${recovery} 点生命，选择你的战利品。`, "good");
@@ -529,6 +601,30 @@ function check(s) {
     return true;
   }
   return false;
+}
+
+function rewardOffer(s) {
+  const route = ARCHETYPES[s.archetype] || ARCHETYPES.contract;
+  const seen = s.rewardSeen || [];
+  const offers = [];
+  const pick = (pool) => {
+    // Prefer unseen cards this battle, but never let a small pool empty a slot.
+    const candidates = pool.filter((k) => !offers.includes(k));
+    const fresh = candidates.filter((k) => !seen.includes(k));
+    const key = shuffled(s, fresh.length ? fresh : candidates)[0];
+    if (key) offers.push(key);
+  };
+  pick(route.pool);
+  if ((s.rewardRound || 1) === 1) pick(route.pool);
+  else
+    pick(
+      Object.values(ARCHETYPES)
+        .flatMap((a) => a.pool)
+        .filter((k) => !route.pool.includes(k)),
+    );
+  pick(REWARD_POOL.filter((k) => !route.pool.includes(k)));
+  s.rewardSeen = [...seen, ...offers];
+  return shuffled(s, offers);
 }
 export function rage(s) {
   const d = DIFFICULTIES[s.difficulty];
@@ -650,27 +746,26 @@ function startBattle(s) {
   s.effects = [];
   s.notice = "";
   if (s.stage === 0) {
-    const opening = [
-      "borrowedKnight",
-      "borrowedFlame",
-      "transfer",
-      "defer",
-      "shield",
-    ];
-    for (const key of opening) {
-      const i = s.draw.findIndex((c) => c.key === key);
-      s.hand.push(s.draw.splice(i, 1)[0]);
-    }
+    const core = (ARCHETYPES[s.archetype] || ARCHETYPES.contract).core;
+    const i = s.draw.findIndex((c) => c.key === core);
+    if (i >= 0) s.hand.push(s.draw.splice(i, 1)[0]);
+    draw(s, 5 - s.hand.length);
+    s.hand = shuffled(s, s.hand);
   } else draw(s, 5);
   log(s, `踏入${e.place}。${e.name}正在等待你。`);
   s.announcement = "你的回合";
 }
-export function newRun(seed = Date.now(), difficulty = "normal") {
+export function newRun(
+  seed = Date.now(),
+  difficulty = "normal",
+  archetype = "contract",
+) {
   const s = {
     version: SAVE_VERSION,
     seed: seed >>> 0,
     nextId: 1,
     difficulty: Object.hasOwn(DIFFICULTIES, difficulty) ? difficulty : "normal",
+    archetype: Object.hasOwn(ARCHETYPES, archetype) ? archetype : "contract",
     phase: "battle",
     stage: 0,
     hero: { uid: "hero", hp: 40, maxHp: 40, shield: 0, burn: 0 },
@@ -695,7 +790,11 @@ export function newRun(seed = Date.now(), difficulty = "normal") {
     notice: "",
     revision: 0,
   };
-  s.deck = STARTER.map((key) => ({ key, uid: id(s), upgraded: false }));
+  s.deck = [...STARTER, ...ARCHETYPES[s.archetype].keys].map((key) => ({
+    key,
+    uid: id(s),
+    upgraded: false,
+  }));
   startBattle(s);
   return s;
 }
@@ -786,18 +885,34 @@ function play(s, a, feedback) {
       );
     if (d.tags.includes("启示")) unitDraw(s, [u], "启示", feedback);
   } else {
-    if (d.contractEffect) manipulate(s, t, d.contractEffect, feedback);
+    if (d.contractEffect)
+      manipulate(s, t, d.contractEffect, feedback, d.foreclosureBonus);
     if (d.damage) {
       const dealt = damage(s, t, d.damage);
       s.stats.damage += dealt;
       if (c.key === "bolt" && t.hp <= 0) draw(s, 1);
     }
-    if (d.burn && t && t.hp > 0) {
-      t.burn += d.burn;
-      fx(s, "burn", t.uid, d.burn);
+    if (d.burn && t) applyBurn(s, t, d.burn, feedback);
+    if (d.detonate) {
+      const layers = t.burn;
+      t.burn = 0;
+      const dealt = damage(s, t, d.detonate + layers * 2);
+      s.stats.damage += dealt;
+      log(s, `焚账引爆：消耗 ${layers} 层灼烧，造成 ${dealt} 点伤害。`, "good");
     }
-    if (d.armor) armor(s, d.armor);
-    if (d.heal) heal(s, s.hero, d.heal);
+    if (d.armorStrike) {
+      const spent = Math.min(s.hero.shield, d.armorStrike);
+      s.hero.shield -= spent;
+      const dealt = damage(s, t, d.strikeBase + spent);
+      s.stats.damage += dealt;
+      log(s, `碎甲反击：消耗 ${spent} 护甲，造成 ${dealt} 点伤害。`, "good");
+    }
+    if (d.armor) armor(s, d.armor, feedback);
+    if (d.heal) {
+      const restored = heal(s, s.hero, d.heal, feedback);
+      if (d.overhealArmor && s.hero.hp > 0)
+        armor(s, d.heal - restored, feedback);
+    }
     if (d.draw) draw(s, d.draw);
     if (d.aoe) for (const u of s.enemies) s.stats.damage += damage(s, u, d.aoe);
     if (d.buff) {
@@ -837,7 +952,7 @@ function play(s, a, feedback) {
   if (["spark", "borrowedEnergy", "foreclose"].includes(c.key))
     s.exhaust.push(c);
   else s.discard.push(c);
-  check(s);
+  check(s, feedback);
 }
 function attack(s, a, feedback) {
   const u = s.allies.find((u) => u.uid === a.uid);
@@ -855,9 +970,9 @@ function attack(s, a, feedback) {
   if (a.target !== "boss") damage(s, u, t.atk, feedback);
   if (u.tags.includes("汲取") && dealt > 0) unitHeal(s, u, "汲取", feedback);
   log(s, `${u.name}攻击${t.name}，造成 ${dealt} 点伤害。`, "good");
-  check(s);
+  check(s, feedback);
 }
-function skill(s, a) {
+function skill(s, a, feedback) {
   requireThat(!s.skillUsed, "每回合只能使用一次英雄技能。");
   requireThat(s.energy >= 2, "英雄技能需要 2 点能量。");
   const t = getTarget(s, a.target, "enemy");
@@ -867,7 +982,7 @@ function skill(s, a) {
   const n = 2 + (s.relics.includes("sun") ? 2 : 0);
   s.stats.damage += damage(s, t, n);
   log(s, `烬火之触对${t.name}造成 ${n} 点伤害。`, "good");
-  check(s);
+  check(s, feedback);
 }
 function burnTick(s, t) {
   if (t.burn > 0) {
@@ -888,7 +1003,7 @@ function endTurn(s, record, feedback) {
     const amount = u.burn;
     burnTick(s, u);
     // Preserve the existing batch cleanup and victory check after ALL burn ticks.
-    if (index === burning.length - 1) ended = check(s);
+    if (index === burning.length - 1) ended = check(s, feedback);
     recordFrame(
       s,
       record,
@@ -906,7 +1021,7 @@ function endTurn(s, record, feedback) {
       triggerStart,
     );
   }
-  if (!burning.length) ended = check(s);
+  if (!burning.length) ended = check(s, feedback);
   if (ended) return;
   log(s, `—— 敌方回合 ${s.turn} ——`);
   for (const u of [...s.enemies]) {
@@ -939,7 +1054,7 @@ function endTurn(s, record, feedback) {
       `${u.name}攻击${target.name || "你"}，造成 ${dealt} 点伤害。`,
       "bad",
     );
-    const ended = check(s);
+    const ended = check(s, feedback);
     recordFrame(
       s,
       record,
@@ -969,13 +1084,16 @@ function endTurn(s, record, feedback) {
   s.weaverDrawn = false;
   for (const u of s.allies) {
     u.ready = true;
-    if (u.tags.includes("复苏")) unitHeal(s, u, "复苏", feedback);
+    if (u.tags.includes("复苏")) {
+      unitHeal(s, u, "复苏", feedback);
+      if (check(s, feedback)) return;
+    }
   }
-  if (s.relics.includes("ring")) armor(s, 2);
+  if (s.relics.includes("ring")) armor(s, 2, feedback);
   draw(s, settlement.drawBudget);
   queueOmens(s);
   log(s, `—— 你的回合 ${s.turn} · 能量 ${s.energy} ——`, "good");
-  check(s);
+  check(s, feedback);
 }
 function postReward(s) {
   const available = Object.keys(RELICS).filter((k) => !s.relics.includes(k));
@@ -995,19 +1113,22 @@ function transition(original, a, record, feedback) {
       requireThat(s.phase === "battle", "当前不在战斗中。");
     if (a.type === "play") play(s, a, feedback);
     else if (a.type === "attack") attack(s, a, feedback);
-    else if (a.type === "skill") skill(s, a);
+    else if (a.type === "skill") skill(s, a, feedback);
     else if (a.type === "endTurn") endTurn(s, record, feedback);
     else if (a.type === "reward") {
       requireThat(s.phase === "reward", "当前无法领取战利品。");
       if (a.key === "heal") {
-        heal(s, s.hero, 8);
-        log(s, "放弃卡牌奖励，恢复 8 点生命。", "good");
+        heal(s, s.hero, 4);
+        log(s, "放弃本轮卡牌奖励，恢复 4 点生命。", "good");
       } else {
         requireThat(s.rewardOffer.includes(a.key), "请选择本次奖励中的卡牌。");
         s.deck.push({ key: a.key, uid: id(s), upgraded: false });
         log(s, `${CARDS[a.key].name}加入了卡组。`, "good");
       }
-      postReward(s);
+      if ((s.rewardRound || 1) === 1) {
+        s.rewardRound = 2;
+        s.rewardOffer = rewardOffer(s);
+      } else postReward(s);
     } else if (a.type === "relic") {
       requireThat(
         s.phase === "relic" && s.relicOffer.includes(a.key),
@@ -1127,6 +1248,8 @@ export function validateSave(s) {
       Number.isInteger(s.seed) &&
       Number.isInteger(s.nextId) &&
       Object.hasOwn(DIFFICULTIES, s.difficulty) &&
+      (s.archetype === undefined || Object.hasOwn(ARCHETYPES, s.archetype)) &&
+      (s.rewardRound === undefined || [1, 2].includes(s.rewardRound)) &&
       Number.isInteger(s.stage) &&
       s.stage >= 0 &&
       s.stage < 5 &&

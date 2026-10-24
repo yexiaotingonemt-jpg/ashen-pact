@@ -43,7 +43,14 @@ import {
   ArrowLeftRight,
   FilePenLine,
 } from "lucide-react";
-import { CARDS, cardInfo, ENCOUNTERS, RELICS, DIFFICULTIES } from "./data.js";
+import {
+  CARDS,
+  cardInfo,
+  ENCOUNTERS,
+  RELICS,
+  DIFFICULTIES,
+  ARCHETYPES,
+} from "./data.js";
 import {
   actionFeedback,
   newRun,
@@ -84,13 +91,19 @@ const relicIcons = {
   flag: Flag,
 };
 const routeIcons = [Castle, Trees, Church, Swords, Crown];
+const archetypeIcons = {
+  contract: FilePenLine,
+  burn: Flame,
+  armor: Shield,
+  healing: Heart,
+};
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (validateSave(s))
       return { ...s, effects: [], notice: "", announcement: "" };
   } catch {}
-  return newRun();
+  return { ...newRun(), setupPending: true };
 }
 function settings() {
   try {
@@ -423,7 +436,11 @@ export default function App() {
     [selection, setSelection] = useState(null),
     [modal, setModal] = useState(() => {
       try {
-        return localStorage.getItem("ashen-pact-future-intro") ? null : "intro";
+        return localStorage.getItem("ashen-pact-future-intro")
+          ? savedState.setupPending
+            ? "new"
+            : null
+          : "intro";
       } catch {
         return "intro";
       }
@@ -433,6 +450,9 @@ export default function App() {
     [announcement, setAnnouncement] = useState(""),
     [campChoice, setCampChoice] = useState(null),
     [difficulty, setDifficulty] = useState(savedState.difficulty),
+    [archetype, setArchetype] = useState(savedState.archetype || "contract"),
+    [catalogFilter, setCatalogFilter] = useState("all"),
+    [catalogUpgraded, setCatalogUpgraded] = useState(false),
     [full, setFull] = useState(false);
   const s = playbackState || savedState;
   const [inspectedContract, setInspectedContract] = useState(null);
@@ -452,6 +472,7 @@ export default function App() {
     selectedInfo = selectedCard ? cardInfo(selectedCard) : null;
   const [storageWarning, setStorageWarning] = useState(false);
   useEffect(() => {
+    if (savedState.setupPending) return;
     try {
       localStorage.setItem(
         SAVE_KEY,
@@ -675,7 +696,7 @@ export default function App() {
     try {
       localStorage.setItem("ashen-pact-future-intro", "seen");
     } catch {}
-    setModal(null);
+    setModal(savedState.setupPending ? "new" : null);
   }
   function targetAlly(u) {
     if (busy) return;
@@ -853,7 +874,7 @@ export default function App() {
     setCombatCue(null);
     setAbilityCue(null);
     setBusy(false);
-    setS(newRun(Date.now(), difficulty));
+    setS(newRun(Date.now(), difficulty, archetype));
     setSelection(null);
     setModal(null);
     setCampChoice(null);
@@ -988,7 +1009,7 @@ export default function App() {
           <Art index={0} label="烬火行者" />
           <span className="portrait-fade" />
           <div className="hero-caption">
-            <small>最后的持火者</small>
+            <small>{ARCHETYPES[s.archetype || "contract"].name}</small>
             <h1>烬火行者</h1>
           </div>
           <i className="corner tl" />
@@ -1086,11 +1107,18 @@ export default function App() {
       <section className="battlefield" aria-label="战场">
         <div className="enemy-header">
           <button
-            className={`boss-name ornamental ${targets.includes("boss") ? "targetable" : ""} ${combatClass(combatCue, "boss")}`}
+            className={`boss-name ornamental ${targets.includes("boss") ? "targetable" : ""} ${combatClass(combatCue, "boss")} ${abilityClass(abilityCue, "boss")}`}
             data-combat-id="boss"
             onClick={() => targetEnemy("boss")}
             aria-label={`攻击首领 ${s.boss.name}，${s.boss.hp} 生命`}
           >
+            {abilityCue?.targetId === "boss" && (
+              <span className="ability-result-label">
+                {abilityCue.effectType === "burn"
+                  ? `灼烧 +${abilityCue.value}`
+                  : `伤害 ${abilityCue.value}`}
+              </span>
+            )}
             <div>
               <span className="boss-diamond" />
               <h2>{s.boss.name}</h2>
@@ -1447,15 +1475,14 @@ export default function App() {
             </article>
           </div>
           <div className="intro-combo">
-            <strong>试试这条因果链</strong>
-            <span>
-              明日之焰 <ChevronRight size={13} /> 债务转嫁{" "}
-              <ChevronRight size={13} /> 提前清算
-            </span>
-            <small>先打 6 伤害，再把代价变成首领立即支付的 8 生命。</small>
+            <strong>选择你的因果链</strong>
+            <span>书契转嫁 · 灼烧引爆 · 铸甲反击 · 薪火复苏</span>
+            <small>
+              四种 12 张起始牌组。每场胜利选两轮牌，让构筑在远征中生长。
+            </small>
           </div>
           <button className="gold-button modal-cta" onClick={dismissIntro}>
-            签下第一份契约
+            {savedState.setupPending ? "选择远征路线" : "回到战场"}
             <ChevronRight size={17} />
           </button>
           <button
@@ -1595,7 +1622,7 @@ export default function App() {
           title="持火者的战斗手册"
           subtitle="先召唤，再进攻。每一簇火焰，都有它的用处。"
           wide
-          onClose={() => setModal(null)}
+          onClose={() => setModal(savedState.setupPending ? "new" : null)}
         >
           <div className="help-grid">
             {[
@@ -1612,7 +1639,7 @@ export default function App() {
               [
                 ArrowLeftRight,
                 "让首领替你还债",
-                "债务转嫁改变付款人，不改变到期日。提前清算让首领血债立即兑现并 +2。焚毁契约支付 4 生命，可销毁敌方技能承诺。",
+                "债务转嫁改变付款人，不改变到期日。提前清算让首领血债立即兑现并 +2，升级后变为 +5。焚毁契约支付 4 生命，可销毁敌方技能承诺。",
               ],
               [
                 Zap,
@@ -1642,7 +1669,22 @@ export default function App() {
               [
                 Tent,
                 "远征与成长",
-                "击败首领后，先把未到期己方债务折付生命，再恢复 6 生命。付不清仍会失败。然后选卡牌与遗物，在营火休息、升级或精简卡组。五战结束后仍须完成清账。",
+                "击败首领后，先清账再恢复 6 生命。随后选两轮牌：先强化当前路线，再寻找跨路线联动。每轮也可放弃并恢复 4 生命。最后领取遗物、在营火休息或调整牌组。",
+              ],
+              [
+                Flame,
+                "灼烧与引爆",
+                "灼烧在敌方行动前按层数造成伤害，再减少 1 层。先用引燃随从与灼烧法术叠层，再用引爆将剩余火焰转成即时伤害。",
+              ],
+              [
+                Shield,
+                "铸甲与反击",
+                "护甲能跨回合保留。获得护甲可以触发锻甲随从成长，盾击则消耗护甲造成伤害；保命与进攻之间需要取舍。",
+              ],
+              [
+                Heart,
+                "治疗与复苏",
+                "治疗不只用于续命：返照医者每回合前两次英雄治疗可伤害首领，满血时的溢出治疗也能触发。特定治疗牌还能将溢出变为护甲。",
               ],
             ].map(([I, t, c]) => (
               <article key={t}>
@@ -1662,7 +1704,7 @@ export default function App() {
           </div>
           <button
             className="gold-button modal-cta"
-            onClick={() => setModal(null)}
+            onClick={() => setModal(savedState.setupPending ? "new" : null)}
           >
             让火焰回答
             <ChevronRight size={18} />
@@ -1681,7 +1723,7 @@ export default function App() {
           }
           subtitle={
             modal === "deck"
-              ? `${s.deck.length} 张卡牌 · 营火旁可以升级或移除卡牌`
+              ? `${ARCHETYPES[s.archetype || "contract"].name} · ${s.deck.length} 张卡牌 · 营火旁可以升级或移除`
               : modal === "draw"
                 ? `${s.draw.length} 张 · 以下按费用排列，不代表抽牌顺序`
                 : `${s.discard.length} 张 · 牌库耗尽后将重新洗入`
@@ -1689,6 +1731,14 @@ export default function App() {
           wide
           onClose={() => setModal(null)}
         >
+          {modal === "deck" && (
+            <button
+              className="secondary-button catalog-open"
+              onClick={() => setModal("catalog")}
+            >
+              <BookOpen size={15} /> 查看全部 {Object.keys(CARDS).length} 种卡牌
+            </button>
+          )}
           <div className="collection">
             {[
               ...(modal === "deck"
@@ -1712,6 +1762,57 @@ export default function App() {
               另有 {s.exhaust.length} 张卡已消耗，本场战斗不再洗回。
             </p>
           )}
+        </Modal>
+      )}
+      {modal === "catalog" && (
+        <Modal
+          title="灰烬卡牌图鉴"
+          subtitle={`${Object.keys(CARDS).length} 种卡牌 · 查看基础与升级效果，规划你的下一套构筑。`}
+          wide
+          onClose={() => setModal("deck")}
+        >
+          <div className="catalog-controls">
+            <div className="catalog-tabs" aria-label="筛选卡牌">
+              {[
+                ["all", "全部"],
+                ["unit", "随从"],
+                ["spell", "法术"],
+              ].map(([key, label]) => (
+                <button
+                  key={key}
+                  className={catalogFilter === key ? "chosen" : ""}
+                  aria-pressed={catalogFilter === key}
+                  onClick={() => setCatalogFilter(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <button
+              className={
+                "secondary-button " + (catalogUpgraded ? "chosen" : "")
+              }
+              aria-pressed={catalogUpgraded}
+              onClick={() => setCatalogUpgraded(!catalogUpgraded)}
+            >
+              <ArrowUp size={14} />{" "}
+              {catalogUpgraded ? "查看基础效果" : "查看升级效果"}
+            </button>
+          </div>
+          <div className="collection catalog-collection">
+            {Object.entries(CARDS)
+              .filter(
+                ([, d]) => catalogFilter === "all" || d.type === catalogFilter,
+              )
+              .map(([key]) => (
+                <Card
+                  key={key}
+                  card={{ key, upgraded: catalogUpgraded }}
+                  mini
+                  detail
+                />
+              ))}
+          </div>
         </Modal>
       )}
       {modal === "log" && (
@@ -1806,10 +1907,43 @@ export default function App() {
       )}
       {modal === "new" && (
         <Modal
-          title="再缔一次契约"
-          subtitle="新的远征会替换当前进度。选择你将面对的长夜。"
-          onClose={() => setModal(null)}
+          title="选择火焰的形状"
+          subtitle={
+            savedState.setupPending
+              ? "8 张通用牌，加上 4 张路线牌。以不同的方式走出长夜。"
+              : "选择新的起始路线与难度。开启后将替换当前远征。"
+          }
+          wide
+          className="new-run-modal"
+          onClose={savedState.setupPending ? undefined : () => setModal(null)}
         >
+          <h3 className="setup-label">
+            起始路线 <span>12 张牌 · 核心从开局就能上手</span>
+          </h3>
+          <div className="archetype-options">
+            {Object.entries(ARCHETYPES).map(([key, route]) => {
+              const I = archetypeIcons[key];
+              return (
+                <button
+                  key={key}
+                  className={`archetype-choice ${key} ${archetype === key ? "chosen" : ""}`}
+                  aria-pressed={archetype === key}
+                  onClick={() => setArchetype(key)}
+                >
+                  <div className="archetype-heading">
+                    <I size={22} />
+                    <h3>{route.name}</h3>
+                    {archetype === key && <Check size={16} />}
+                  </div>
+                  <p>{route.description}</p>
+                  <small>
+                    {route.keys.map((k) => CARDS[k].name).join(" · ")}
+                  </small>
+                </button>
+              );
+            })}
+          </div>
+          <h3 className="setup-label">长夜难度</h3>
           <div className="difficulty-options">
             {Object.entries(DIFFICULTIES).map(([k, d]) => (
               <button
@@ -1843,8 +1977,12 @@ export default function App() {
 
       {s.phase === "reward" && (
         <Modal
-          title="余火中的馈赠"
-          subtitle={`${s.boss.name}已被击败 · 选择一张卡牌，加入远征牌组。战后生命已恢复。`}
+          title={`余火中的馈赠 · ${s.rewardRound || 1} / 2`}
+          subtitle={
+            (s.rewardRound || 1) === 1
+              ? `${ARCHETYPES[s.archetype || "contract"].name} · 强化当前路线，也可选择另一种可能。`
+              : "跨越原有路线 · 寻找新的联动，或补上牌组缺口。"
+          }
           wide
           className="reward-modal"
         >
@@ -1877,10 +2015,13 @@ export default function App() {
             onClick={() => dispatch({ type: "reward", key: "heal" })}
           >
             <Heart size={15} />
-            放弃卡牌，额外恢复 8 点生命
+            放弃本轮卡牌，恢复 4 点生命
           </button>
           <p className="muted centered">
-            当前生命 {s.hero.hp} / {s.hero.maxHp} · 选择后继续领取遗物
+            当前生命 {s.hero.hp} / {s.hero.maxHp} ·{" "}
+            {(s.rewardRound || 1) === 1
+              ? "选择后继续第二轮选牌"
+              : "选择后继续领取遗物"}
           </p>
         </Modal>
       )}
@@ -2002,7 +2143,7 @@ export default function App() {
           )}
         </Modal>
       )}
-      {(s.phase === "won" || s.phase === "lost") && (
+      {(s.phase === "won" || s.phase === "lost") && modal !== "new" && (
         <Modal
           title={s.phase === "won" ? "长夜已尽，黎明将至" : "余火，尚未熄灭"}
           subtitle={
@@ -2037,12 +2178,14 @@ export default function App() {
           <button
             className="gold-button modal-cta"
             onClick={() => {
-              setS(newRun(Date.now(), s.difficulty));
+              setDifficulty(s.difficulty);
+              setArchetype(s.archetype || "contract");
+              setModal("new");
               setSelection(null);
               setCampChoice(null);
             }}
           >
-            再燃一次火光
+            选择下一场远征
             <RotateCcw size={17} />
           </button>
           <p className="muted centered">
