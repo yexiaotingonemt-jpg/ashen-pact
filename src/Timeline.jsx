@@ -88,6 +88,7 @@ export default function Timeline({
                     disabled={busy}
                     className={`contract-entry ${c.owner} ${c.kind} ${targets.includes(c.uid) ? "targetable" : ""}`}
                     data-contract-id={c.uid}
+                    data-combat-id={c.uid}
                     data-contract-kind={c.kind}
                     data-owner={c.owner}
                     data-due={c.due}

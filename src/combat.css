@@ -27,14 +27,19 @@
   stroke-width: 4;
 }
 .game .unit-card.combat-attacker.combat-windup {
-  animation: enemyWindup 180ms ease-in both;
+  animation: none;
   z-index: 8;
   border-color: #ffe0a0;
   filter: brightness(1.2) drop-shadow(0 0 8px #e9884f);
 }
 .game .unit-card.combat-attacker.combat-impact {
-  animation: enemyRecoil 160ms ease-out both;
+  animation: none;
   z-index: 8;
+}
+.game .unit-card.combat-attacker.combat-travel {
+  scale: 1.14;
+  z-index: 8;
+  border-color: #ffe0a0;
 }
 .game .combat-target {
   outline: 2px solid #ffbf8d;
@@ -266,5 +271,306 @@
   .game .unit-card.combat-arriving,
   .game .combat-target {
     animation: none !important;
+  }
+}
+
+/* Spell previews reserve hand slots; combat inputs remain locked during motion. */
+.game.resolving .unit-card {
+  transform: none !important;
+  transition: none;
+}
+.game .unit-row:has(.combat-attacker, .ability-source) {
+  z-index: 10;
+}
+.combat-arrow.attack-link line {
+  stroke-width: 1.5;
+  opacity: 0.32;
+}
+.combat-arrow.attack-link.combat-impact line {
+  opacity: 0.16;
+}
+.combat-arrow .combat-bolt circle {
+  stroke: none;
+}
+.combat-arrow .combat-bolt circle:first-child {
+  fill: url(#combat-bolt-glow);
+  r: 19px;
+}
+.combat-arrow .combat-bolt circle:last-child {
+  fill: #fff7cd;
+  r: 4px;
+}
+.game .combat-caster {
+  box-shadow: 0 0 20px #a9efcf88;
+}
+.combat-bolt {
+  animation: combatBoltFlight var(--flight) cubic-bezier(0.3, 0.05, 0.6, 1) both;
+  filter: drop-shadow(0 0 7px #ffb14a);
+}
+.combat-impact-ring {
+  fill: #ffe3a044 !important;
+  stroke: #fff0c3 !important;
+  stroke-width: 3 !important;
+  animation: combatImpactRing 220ms ease-out both;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.combat-hit-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 11;
+  border-radius: inherit;
+  background: radial-gradient(ellipse, #ff655099, #bc1721cc);
+  box-shadow: inset 0 0 20px #ff2b35;
+  pointer-events: none;
+  animation: combatRedFlash 210ms ease-out both;
+}
+.ability-burst {
+  --burst-color: #b5f7d6;
+  position: absolute;
+  z-index: 12;
+  inset: 6px;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(circle, #b1ffd644, transparent 70%);
+  animation: abilityLocalBloom 380ms ease-out both;
+}
+.ability-burst.effect-damage {
+  --burst-color: #ffb67b;
+}
+.ability-burst.effect-armor {
+  --burst-color: #b5e4ff;
+}
+.ability-burst i {
+  position: absolute;
+  inset: 12%;
+  border: 2px solid var(--burst-color);
+  border-radius: 50%;
+}
+.ability-burst i:nth-child(2) {
+  inset: 25%;
+  transform: rotate(45deg);
+  border-radius: 3px;
+}
+.ability-burst i:nth-child(3) {
+  inset: 36%;
+  background: var(--burst-color);
+  filter: blur(7px);
+}
+.future-mode .hand .play-card.spell-origin {
+  opacity: 0.22;
+}
+.combat-focus-card {
+  --cast-color: #ffc885;
+  position: fixed;
+  z-index: 44;
+  pointer-events: none;
+  transform-origin: center;
+  filter: drop-shadow(0 0 14px #e9b76677);
+}
+.combat-focus-card.cast-heal {
+  --cast-color: #b1ffcf;
+}
+.combat-focus-card.cast-armor {
+  --cast-color: #bce6ff;
+}
+.combat-focus-card.cast-contract {
+  --cast-color: #a9f1e4;
+}
+.combat-focus-card.cast-energy {
+  --cast-color: #b3f7ff;
+}
+.future-mode .combat-focus-card .play-card {
+  width: 100%;
+  height: 100%;
+  transform: none;
+  box-shadow:
+    0 0 0 2px var(--cast-color),
+    0 0 25px #e8bf7577;
+}
+.combat-focus-card.cast-windup {
+  animation: spellSourceLift 260ms ease-out both;
+}
+.combat-focus-card.cast-impact {
+  animation: spellSourceRelease 220ms ease-out both;
+}
+.cast-sigil {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: 20%;
+  width: 76px;
+  height: 76px;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  color: var(--cast-color);
+  background: radial-gradient(
+    circle,
+    #14221bea,
+    #14221b55 65%,
+    transparent 70%
+  );
+  filter: drop-shadow(0 0 7px var(--cast-color));
+  animation: spellRunePulse 260ms ease-out both;
+}
+.cast-sigil i {
+  position: absolute;
+  inset: 4px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+}
+.cast-sigil i:last-child {
+  inset: 14px;
+  border-radius: 3px;
+  transform: rotate(45deg);
+}
+.combat-damage-number {
+  position: fixed;
+  z-index: 45;
+  color: #ffe7df;
+  font:
+    bold 34px/1 Georgia,
+    serif;
+  text-shadow:
+    0 2px 3px #160403,
+    0 0 3px #6c0808,
+    0 0 12px #fe5349;
+  pointer-events: none;
+  animation: combatNumberRise 680ms ease-out both;
+  white-space: nowrap;
+}
+.combat-damage-number.blocked {
+  color: #c6edff;
+  font:
+    600 17px/1.2 "Microsoft YaHei",
+    sans-serif;
+  text-shadow:
+    0 1px 3px #000,
+    0 0 9px #76c3e8;
+}
+.game .combat-float.hit,
+.game .combat-float.ward {
+  visibility: hidden;
+}
+@keyframes combatBoltFlight {
+  from {
+    transform: translate(var(--from-x), var(--from-y)) scale(0.65);
+  }
+  to {
+    transform: translate(var(--to-x), var(--to-y)) scale(1.2);
+  }
+}
+@keyframes combatImpactRing {
+  from {
+    opacity: 1;
+    scale: 0.4;
+  }
+  to {
+    opacity: 0;
+    scale: 2.6;
+  }
+}
+@keyframes combatRedFlash {
+  0% {
+    opacity: 0.85;
+  }
+  30% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes abilityLocalBloom {
+  0% {
+    opacity: 0;
+    scale: 0.4;
+    rotate: -30deg;
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    scale: 1.3;
+    rotate: 45deg;
+  }
+}
+@keyframes spellSourceLift {
+  0% {
+    scale: 1;
+  }
+  45% {
+    scale: 1.14;
+  }
+  75% {
+    scale: 1.14;
+  }
+  100% {
+    scale: 1.14;
+  }
+}
+@keyframes spellSourceRelease {
+  from {
+    scale: 1.14;
+    opacity: 1;
+  }
+  to {
+    scale: 1;
+    opacity: 0;
+  }
+}
+@keyframes spellRunePulse {
+  0% {
+    opacity: 0;
+    scale: 0.5;
+    rotate: -25deg;
+  }
+  55% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    scale: 1.15;
+    rotate: 0deg;
+  }
+}
+@keyframes combatNumberRise {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 6px) scale(0.65);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-50%, -10px) scale(1.12);
+  }
+  68% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -52px) scale(0.95);
+  }
+}
+@media (max-width: 700px) {
+  .combat-damage-number {
+    font-size: 27px;
+  }
+  .combat-damage-number.blocked {
+    font-size: 14px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .game .unit-card.combat-attacker {
+    scale: 1 !important;
+  }
+  .combat-bolt,
+  .combat-hit-flash,
+  .ability-burst {
+    display: none;
+  }
+  .combat-damage-number {
+    transform: translate(-50%, -12px);
   }
 }

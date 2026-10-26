@@ -69,6 +69,13 @@ import CombatPlayback, {
   abilityCaption,
 } from "./CombatPlayback.jsx";
 import {
+  playerFrames,
+  damageTargets,
+  ATTACK_BEATS,
+  SPELL_BEATS,
+  ABILITY_BEAT,
+} from "./playback.js";
+import {
   contractLabel,
   contractText,
   debtCaption,
@@ -165,6 +172,8 @@ function Card({
   revealed = false,
   mini = false,
   detail = false,
+  casting = false,
+  preview = false,
   index = 0,
 }) {
   const d = cardInfo(card);
@@ -180,13 +189,13 @@ function Card({
         : Sparkles;
   return (
     <Element
-      className={`play-card ${d.type} ${d.debt ? "has-debt" : ""} ${d.contractEffect ? "editor-card" : ""} ${selected ? "selected" : ""} ${disabled ? "unaffordable" : ""} ${mini ? "mini" : ""} ${detail ? "detail" : ""} ${card.upgraded ? "upgraded" : ""} ${revealed ? "ability-drawn" : ""}`}
+      className={`play-card ${d.type} ${d.debt ? "has-debt" : ""} ${d.contractEffect ? "editor-card" : ""} ${selected ? "selected" : ""} ${disabled ? "unaffordable" : ""} ${mini ? "mini" : ""} ${detail ? "detail" : ""} ${card.upgraded ? "upgraded" : ""} ${revealed ? "ability-drawn" : ""} ${casting ? "spell-origin" : ""}`}
       style={{ "--fan": `${index}deg`, "--dip": `${Math.abs(index) * 2}px` }}
       onClick={onClick}
       aria-label={`${onClick ? "选择" : "查看"} ${d.name}，${d.cost} 能量，${kind}${category ? `，${category}` : ""}`}
       data-card-key={card.key}
       data-instance-id={card.uid}
-      data-combat-id={card.uid}
+      data-combat-id={preview ? undefined : card.uid}
       aria-pressed={onClick ? selected : undefined}
       aria-disabled={disabled || locked || undefined}
       title={`${d.name} · ${kind}${category ? ` · ${category}` : ""} · ${d.rarity}\n${d.contractEffect ? "改写：操纵契约的条款、期限或归属。\n" : ""}${d.text}${d.debt ? "\n" + debtCaption(d.debt) : ""}\n${d.flavor}`}
@@ -267,6 +276,11 @@ function Unit({
     >
       <Art index={unit.art} />
       <span className="unit-shadow" />
+      <LocalEffects
+        combatCue={combatCue}
+        abilityCue={abilityCue}
+        target={unit.uid}
+      />
       {abilityCue?.sourceId === unit.uid ? (
         <span key={abilityCue.id} className="ability-unit-label">
           {abilityCue.ability} · 触发
@@ -280,7 +294,9 @@ function Unit({
                 ? "攻击目标"
                 : combatCue.type === "burn"
                   ? "灼烧"
-                  : "契约兑现"}
+                  : combatCue.type === "spell"
+                    ? "法术目标"
+                    : "契约兑现"}
           </span>
         )
       )}
@@ -321,6 +337,42 @@ function Unit({
       )}
       <Effects effects={effects} target={unit.uid} />
     </button>
+  );
+}
+function LocalEffects({ combatCue, abilityCue, target }) {
+  const hit =
+    combatCue?.phase === "impact" && combatCue.hitIds?.includes(target);
+  const abilityHit =
+    abilityCue?.targetId === target &&
+    abilityCue.effectType === "damage" &&
+    abilityCue.value > 0;
+  const casting =
+    combatCue?.sourceId === target &&
+    (combatCue.type === "spell" ||
+      (combatCue.type === "contract" && combatCue.contractKind === "omen"));
+  const source =
+    (abilityCue?.sourceId === target && !abilityCue.defensive) || casting;
+  return (
+    <>
+      {(hit || abilityHit) && (
+        <span
+          key={`hit-${hit ? combatCue.id : abilityCue.id}`}
+          className="combat-hit-flash"
+          aria-hidden="true"
+        />
+      )}
+      {source && (
+        <span
+          key={`ability-${casting ? combatCue.id : abilityCue.id}`}
+          className={`ability-burst effect-${casting ? "spell" : abilityCue.effectType}`}
+          aria-hidden="true"
+        >
+          <i />
+          <i />
+          <i />
+        </span>
+      )}
+    </>
   );
 }
 function Effects({ effects, target }) {
@@ -575,34 +627,7 @@ export default function App() {
     if (busyRef.current || busy) return;
     const original = stateRef.current;
     const { state: next, triggers } = actionFeedback(original, a);
-    const frames = [];
-    if (!next.notice && original.phase === "battle") {
-      const arriving =
-        a.type === "play" &&
-        next.allies.find(
-          (u) => !original.allies.some((old) => old.uid === u.uid),
-        );
-      const source = original.allies.find((u) => u.uid === a.uid);
-      const target =
-        a.target === "boss"
-          ? original.boss
-          : original.enemies.find((u) => u.uid === a.target);
-      if (arriving || (a.type === "attack" && source && target))
-        frames.push({
-          before: original,
-          after: next,
-          effects: next.effects,
-          triggers,
-          cue: {
-            type: arriving ? "summon" : "attack",
-            side: "player",
-            sourceId: arriving?.uid || source.uid,
-            sourceName: arriving?.name || source.name,
-            targetId: arriving?.uid || target.uid,
-            targetName: arriving?.name || target.name,
-          },
-        });
-    }
+    const frames = playerFrames(original, a, next, triggers);
     if (!next.notice && (frames.length || triggers.length))
       beginPlayback(
         { state: next, frames, tailTriggers: frames.length ? [] : triggers },
@@ -810,7 +835,7 @@ export default function App() {
       );
       timer.current = setTimeout(
         () => showTriggers(triggers, after, index + 1, prefix),
-        380,
+        ABILITY_BEAT,
       );
     }
     function showFrame(index) {
@@ -823,19 +848,28 @@ export default function App() {
         return;
       }
       setAbilityCue(null);
-      const cue = { ...frame.cue, id: `${token}-${index}`, phase: "windup" };
+      const cue = {
+        ...frame.cue,
+        hitIds: damageTargets(frame.effects),
+        id: `${token}-${index}`,
+        phase: "windup",
+      };
       const lead =
-        cue.type === "attack" ? (side === "player" ? 140 : 180) : 100;
+        cue.type === "attack"
+          ? ATTACK_BEATS.windup
+          : cue.type === "spell"
+            ? SPELL_BEATS.windup
+            : 100;
       const hold =
         cue.type === "summon"
           ? side === "player"
             ? 320
             : 560
           : cue.type === "attack"
-            ? side === "player"
-              ? 240
-              : 320
-            : 280;
+            ? ATTACK_BEATS.impact
+            : cue.type === "spell"
+              ? SPELL_BEATS.impact
+              : 280;
       const defensive =
         side === "enemy" && cue.type === "attack"
           ? (frame.triggers || []).filter((t) =>
@@ -852,7 +886,7 @@ export default function App() {
         phase: "battle",
       });
       setCombatCue(cue);
-      timer.current = setTimeout(() => {
+      function impact() {
         if (token !== playbackToken.current) return;
         setPlaybackState({
           ...impactView(frame),
@@ -875,7 +909,11 @@ export default function App() {
         timer.current = setTimeout(() => {
           if (following.length) {
             setCombatCue(null);
-            setPlaybackState((view) => ({ ...view, effects: [] }));
+            setPlaybackState((view) => ({
+              ...view,
+              hand: frame.after.hand,
+              effects: [],
+            }));
           }
           showTriggers(
             following,
@@ -884,6 +922,13 @@ export default function App() {
             `frame-${index}`,
           );
         }, hold);
+      }
+      timer.current = setTimeout(() => {
+        if (token !== playbackToken.current) return;
+        if (cue.type === "attack") {
+          setCombatCue({ ...cue, phase: "travel" });
+          timer.current = setTimeout(impact, ATTACK_BEATS.travel);
+        } else impact();
       }, lead);
     }
     timer.current = setTimeout(() => showFrame(0), side === "enemy" ? 150 : 30);
@@ -912,21 +957,20 @@ export default function App() {
   }
   const paymentReminder = upcomingPayment(s);
   const collectionWarning = collectWarning(s);
-  const activeLink =
-    combatCue?.type === "attack"
-      ? combatCue
-      : abilityCue
-        ? {
-            ...abilityCue,
-            targetId:
-              abilityCue.drawnIds?.[0] ||
-              (abilityCue.effectType === "discard"
-                ? "discard"
-                : abilityCue.targetId),
-            type: "ability",
-            phase: "impact",
-          }
-        : combatCue;
+  const activeLink = ["attack", "spell"].includes(combatCue?.type)
+    ? combatCue
+    : abilityCue
+      ? {
+          ...abilityCue,
+          targetId:
+            abilityCue.drawnIds?.[0] ||
+            (abilityCue.effectType === "discard"
+              ? "discard"
+              : abilityCue.targetId),
+          type: "ability",
+          phase: "impact",
+        }
+      : combatCue;
   const showingAbility = abilityCue && !abilityCue.defensive;
   const selectionHint =
     selection?.type === "unit"
@@ -1027,9 +1071,14 @@ export default function App() {
       </header>
 
       <aside className="hero-panel ornamental">
-        <div className="hero-portrait">
+        <div className="hero-portrait" data-combat-id="hero">
           <Art index={0} label="烬火行者" />
           <span className="portrait-fade" />
+          <LocalEffects
+            combatCue={combatCue}
+            abilityCue={abilityCue}
+            target="hero"
+          />
           <div className="hero-caption">
             <small>{ARCHETYPES[s.archetype || "contract"].name}</small>
             <h1>烬火行者</h1>
@@ -1044,7 +1093,6 @@ export default function App() {
             " " +
             abilityClass(abilityCue, "hero")
           }
-          data-combat-id="hero"
         >
           {abilityCue?.targetId === "hero" && !abilityCue.defensive && (
             <span className="ability-result-label">
@@ -1059,7 +1107,11 @@ export default function App() {
           )}
           {combatCue?.targetId === "hero" && (
             <span className="combat-hero-label">
-              {combatCue.type === "attack" ? "攻击目标 · 你" : "契约目标 · 你"}
+              {combatCue.type === "attack"
+                ? "攻击目标 · 你"
+                : combatCue.type === "spell"
+                  ? "法术目标 · 你"
+                  : "契约目标 · 你"}
             </span>
           )}
           <Health hp={s.hero.hp} maxHp={s.hero.maxHp} />
@@ -1134,6 +1186,11 @@ export default function App() {
             onClick={() => targetEnemy("boss")}
             aria-label={`攻击首领 ${s.boss.name}，${s.boss.hp} 生命`}
           >
+            <LocalEffects
+              combatCue={combatCue}
+              abilityCue={abilityCue}
+              target="boss"
+            />
             {abilityCue?.targetId === "boss" && (
               <span className="ability-result-label">
                 {abilityCue.effectType === "burn"
@@ -1339,10 +1396,16 @@ export default function App() {
         </div>
         <div className="turn-actions">
           <button
-            className={`hero-skill ${selection?.type === "skill" ? "selected" : ""} ${s.skillUsed ? "used" : ""}`}
+            className={`hero-skill ${selection?.type === "skill" ? "selected" : ""} ${s.skillUsed ? "used" : ""} ${combatClass(combatCue, "skill")}`}
+            data-combat-id="skill"
             onClick={chooseSkill}
             aria-label="烬火之触，2 能量"
           >
+            <LocalEffects
+              combatCue={combatCue}
+              abilityCue={abilityCue}
+              target="skill"
+            />
             <span className="skill-icon">
               <Flame />
             </span>
@@ -1403,6 +1466,9 @@ export default function App() {
               }
               locked={busy}
               revealed={abilityCue?.drawnIds?.includes(c.uid)}
+              casting={
+                combatCue?.type === "spell" && combatCue.sourceId === c.uid
+              }
               index={(i - (s.hand.length - 1) / 2) * 2.1}
             />
           ))}
@@ -1445,7 +1511,16 @@ export default function App() {
           {storageWarning ? "存档不可用" : "进度自动保存"}
         </span>
       </footer>
-      <CombatPlayback cue={activeLink} onGeometry={setCombatGeometry} />
+      <CombatPlayback
+        cue={activeLink}
+        effects={s.effects}
+        onGeometry={setCombatGeometry}
+        cardPreview={
+          activeLink?.sourceCard ? (
+            <Card card={activeLink.sourceCard} preview />
+          ) : null
+        }
+      />
       {notice && (
         <div className="toast" role="status">
           <Flame size={16} />
