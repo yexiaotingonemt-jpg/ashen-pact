@@ -169,18 +169,27 @@ function Card({
 }) {
   const d = cardInfo(card);
   const Element = onClick ? "button" : "article";
+  const kind = d.type === "unit" ? "随从" : "法术";
+  const category = d.debt ? "预支" : d.contractEffect ? "改写" : null;
+  const KindIcon = d.debt
+    ? Clock3
+    : d.contractEffect
+      ? FilePenLine
+      : d.type === "unit"
+        ? Sword
+        : Sparkles;
   return (
     <Element
       className={`play-card ${d.type} ${d.debt ? "has-debt" : ""} ${d.contractEffect ? "editor-card" : ""} ${selected ? "selected" : ""} ${disabled ? "unaffordable" : ""} ${mini ? "mini" : ""} ${detail ? "detail" : ""} ${card.upgraded ? "upgraded" : ""} ${revealed ? "ability-drawn" : ""}`}
       style={{ "--fan": `${index}deg`, "--dip": `${Math.abs(index) * 2}px` }}
       onClick={onClick}
-      aria-label={`${onClick ? "选择" : "查看"} ${d.name}，${d.cost} 能量`}
+      aria-label={`${onClick ? "选择" : "查看"} ${d.name}，${d.cost} 能量，${kind}${category ? `，${category}` : ""}`}
       data-card-key={card.key}
       data-instance-id={card.uid}
       data-combat-id={card.uid}
       aria-pressed={onClick ? selected : undefined}
       aria-disabled={disabled || locked || undefined}
-      title={`${d.name} · ${d.rarity}\n${d.text}${d.debt ? "\n" + debtCaption(d.debt) : ""}\n${d.flavor}`}
+      title={`${d.name} · ${kind}${category ? ` · ${category}` : ""} · ${d.rarity}\n${d.contractEffect ? "改写：操纵契约的条款、期限或归属。\n" : ""}${d.text}${d.debt ? "\n" + debtCaption(d.debt) : ""}\n${d.flavor}`}
     >
       <div className="card-frame">
         <Art index={d.art} className="card-art" />
@@ -188,19 +197,17 @@ function Card({
         <div className="card-cost">
           <span>{d.cost}</span>
         </div>
+        <div
+          className={`card-kind ${category ? (d.debt ? "advance" : "contract") : d.type}`}
+        >
+          <KindIcon size={12} aria-hidden="true" />
+          <span>
+            {kind}
+            {category && <> · {category}</>}
+          </span>
+        </div>
         <div className="card-name">{d.name}</div>
         <div className="card-copy">
-          <div className="card-type">
-            <span />
-            {d.debt
-              ? "预 支"
-              : d.contractEffect
-                ? "改 写"
-                : d.type === "unit"
-                  ? "随 从"
-                  : "法 术"}
-            <span />
-          </div>
           <p>{d.text}</p>
           {d.debt && (
             <div className="card-debt">
@@ -1814,6 +1821,16 @@ export default function App() {
               {catalogUpgraded ? "查看基础效果" : "查看升级效果"}
             </button>
           </div>
+          <p className="catalog-card-guide">
+            <span>
+              <Clock3 size={12} />
+              预支：先获益，未来付出代价
+            </span>
+            <span>
+              <FilePenLine size={12} />
+              改写：操纵契约条款、期限或归属
+            </span>
+          </p>
           <div className="collection catalog-collection">
             {Object.entries(CARDS)
               .filter(
